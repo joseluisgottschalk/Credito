@@ -17,6 +17,8 @@ h1{font-size:20px;margin:0 0 2px}h2{font-size:15px;margin:0 0 10px}.sub{color:va
 .sw{position:relative;flex:1 1 280px}
 input[type=text],textarea{width:100%;padding:9px 11px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
 textarea{min-height:110px;resize:vertical}#msg{font-size:12.5px;color:var(--mut);margin-top:8px}
+select{padding:9px 8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+button:disabled{opacity:.6;cursor:wait}
 button{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:8px;padding:8px 12px;cursor:pointer}
 button.p{background:var(--ac);border-color:var(--ac);color:#fff}
 #dd{position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--card);border:1px solid var(--bd);border-radius:8px;max-height:260px;overflow:auto;box-shadow:0 6px 18px rgba(0,0,0,.18);display:none}
@@ -43,7 +45,7 @@ svg text{fill:var(--mut);font-size:10px}
 <h1>Avaliação de clientes por pontualidade</h1>
 <div class="sub" id="ref"></div>
 
-<div class="card"><h2>Base de dados</h2><div class="row" style="align-items:center"><input type="file" id="upl" accept=".xlsx,.xls,.xlsm,.csv" style="max-width:340px"><button id="rst">Limpar base salva</button></div><div id="st" class="sub" style="margin-top:8px"></div><div class="sub">Envie a planilha atualizada (mesmas colunas: Cd_empresa, Nome_completo, Nf, Complemento, Valor, Saldo, Dt_vencimento, Dt_ultima_liqui; opcional: Cd_centralizado, que reúne os clientes em rede de lojas). O arquivo é lido no seu navegador e não é enviado a lugar nenhum; a base nova fica salva neste navegador.</div></div>
+<div class="card"><h2>Base de dados</h2><div class="row" style="align-items:center;margin-bottom:10px"><input type="text" id="n8u" placeholder="URL do webhook do n8n, ex.: http://localhost:5678/webhook/avaliacao-clientes" style="flex:1 1 340px;width:auto"><select id="n8m" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select><button class="p" id="upd">Atualizar dados</button></div><div class="row" style="align-items:center"><input type="file" id="upl" accept=".xlsx,.xls,.xlsm,.csv,.json,.txt" style="max-width:340px"><button id="rst">Limpar base salva</button></div><div id="st" class="sub" style="margin-top:8px"></div><div class="sub"><b>Atualizar dados</b> executa a rotina no n8n (webhook) e traz o resultado. Também dá para enviar um arquivo (planilha ou o JSON do n8n) com as colunas: Cd_empresa, Nome_completo, Nf, Complemento, Valor, Saldo, Dt_vencimento, Dt_ultima_liqui; opcional: Cd_centralizado, que reúne os clientes em rede de lojas). Os dados são lidos no seu navegador, sem passar por terceiros; a base nova fica salva neste navegador.</div></div>
 <div class="card"><h2>1. Escolha os clientes</h2>
 <div class="row">
 <div class="sw"><input type="text" id="q" placeholder="Buscar por nome ou código e clicar para adicionar…" autocomplete="off"><div id="dd"></div></div>
@@ -181,19 +183,56 @@ function applyBase(arr,label){DATA=groupRedes(arr);BASE=label;idx();SEL=[...new 
 function idb(){return new Promise((ok,no)=>{const q=indexedDB.open('aval-clientes',1);q.onupgradeneeded=()=>q.result.createObjectStore('k');q.onsuccess=()=>ok(q.result);q.onerror=()=>no(q.error)})}
 async function idbOp(mode,fn){const d=await idb();return new Promise((ok,no)=>{const t=d.transaction('k',mode),rq=fn(t.objectStore('k'));t.oncomplete=()=>ok(rq&&rq.result);t.onerror=()=>no(t.error)})}
 const st=t=>{$('#st').innerHTML=t};
+function jsonToAoa(L){
+ if(!Array.isArray(L)){const k=L&&typeof L==='object'?Object.keys(L).find(k=>Array.isArray(L[k])):null;L=k?L[k]:(L&&typeof L==='object'?[L]:[])}
+ L=L.map(x=>x&&x.json&&typeof x.json==='object'?x.json:x).filter(x=>x&&typeof x==='object');
+ if(!L.length)throw new Error('O JSON não tem nenhum registro.');
+ const H=['Cd_empresa','Nome_completo','Nf','Complemento','Dt_vencimento','Dt_ultima_liqui','Valor','Saldo','Cd_centralizado'],map={};
+ for(let i=0;i<Math.min(L.length,200);i++)Object.keys(L[i]).forEach(k=>{const n=norm(k).trim();if(!(n in map))map[n]=k});
+ const ks=H.map(x=>map[norm(x)]),out=new Array(L.length+1);out[0]=H;
+ for(let i=0;i<L.length;i++){const o=L[i];out[i+1]=ks.map(k=>k==null?null:o[k])}
+ return out}
+async function finish(R,label,extra){
+ if(R.err)throw new Error(R.err);
+ applyBase(R.arr,label);
+ let sv='';try{await idbOp('readwrite',s=>s.put({arr:R.arr,label},'base'))}catch(x){sv=' Não foi possível salvar no navegador: a base vale só nesta sessão.'}
+ const rd=DATA.filter(c=>c.rede);
+ st('<b>Base atualizada.</b> '+R.lin.toLocaleString('pt-BR')+' parcelas lidas, '+R.arr.length.toLocaleString('pt-BR')+' clientes.'+(R.hasG?' Cd_centralizado encontrado: '+rd.length+' rede(s) de lojas, reunindo '+rd.reduce((a,c)=>a+c.L.length,0)+' clientes.':' Coluna Cd_centralizado não encontrada: todos os clientes foram avaliados individualmente.')+(R.nod?' '+R.nod+' baixadas sem data de liquidação (fora da pontualidade).':'')+(R.fut?' '+R.fut+' com data de liquidação futura (ignoradas).':'')+sv+(extra||''))}
 $('#upl').onchange=async e=>{const f=e.target.files[0];if(!f)return;st('Lendo '+f.name+', aguarde…');
- try{if(!window.XLSX)throw new Error('A biblioteca de leitura de planilhas não carregou. Recarregue a página.');
+ try{if(/\.(json|txt)$/i.test(f.name)){e.target.value='';await new Promise(r=>setTimeout(r,40));let L;try{L=JSON.parse(await f.text())}catch(x){throw new Error('o arquivo não é um JSON válido.')}
+  await finish(build(jsonToAoa(L)),'Base: '+f.name+' ('+new Date().toLocaleDateString('pt-BR')+')');return}
+  if(!window.XLSX)throw new Error('A biblioteca de leitura de planilhas não carregou. Recarregue a página.');
   await new Promise(r=>setTimeout(r,40));
   const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
   const nm=wb.SheetNames.find(n=>{const a=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,range:0,defval:null})[0]||[];return a.some(x=>norm(String(x)).trim()==='cd_empresa')})||wb.SheetNames[0];
-  const R=build(XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,raw:true,defval:null}));
-  if(R.err)throw new Error(R.err);
-  const label='Base: '+f.name+' ('+new Date().toLocaleDateString('pt-BR')+')';
-  applyBase(R.arr,label);
-  let sv='';try{await idbOp('readwrite',s=>s.put({arr:R.arr,label},'base'))}catch(x){sv=' Não foi possível salvar no navegador: a base vale só nesta sessão.'}
-  st('<b>Base atualizada.</b> '+R.lin.toLocaleString('pt-BR')+' parcelas lidas, '+R.arr.length.toLocaleString('pt-BR')+' clientes.'+(R.hasG?' Cd_centralizado encontrado: '+DATA.filter(c=>c.rede).length+' rede(s) de lojas, reunindo '+DATA.filter(c=>c.rede).reduce((a,c)=>a+c.L.length,0)+' clientes.':' Coluna Cd_centralizado não encontrada: todos os clientes foram avaliados individualmente.')+(R.nod?' '+R.nod+' baixadas sem data de liquidação (fora da pontualidade).':'')+(R.fut?' '+R.fut+' com data de liquidação futura (ignoradas).':'')+sv)
+  await finish(build(XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,raw:true,defval:null})),'Base: '+f.name+' ('+new Date().toLocaleDateString('pt-BR')+')');
  }catch(x){st('<span class="neg">Não foi possível atualizar: '+x.message+'</span>')}
  e.target.value=''};
+const UK='aval-n8n-url',MK='aval-n8n-m';
+try{$('#n8u').value=localStorage.getItem(UK)||'';$('#n8m').value=localStorage.getItem(MK)||'GET'}catch(x){}
+$('#upd').onclick=async()=>{
+ const u=$('#n8u').value.trim(),m=$('#n8m').value||'GET',b=$('#upd');
+ if(!/^https?:\/\//i.test(u)){st('<span class="neg">Informe a URL do webhook do n8n (começa com http:// ou https://).</span>');return}
+ try{localStorage.setItem(UK,u);localStorage.setItem(MK,m)}catch(x){}
+ b.disabled=true;st('Executando a rotina no n8n… isso pode levar alguns minutos.');
+ const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),20*60*1000);
+ try{
+  let resp;
+  try{resp=await fetch(u,{method:m,signal:ctl.signal,cache:'no-store'})}
+  catch(x){throw new Error(x.name==='AbortError'?'tempo esgotado (20 min) esperando o n8n.':'não consegui falar com o n8n. Confira se ele está rodando, se a URL está certa, se o workflow está ativo (use a URL de produção, /webhook/, e não /webhook-test/) e se o CORS do nó Webhook permite esta página.')}
+  if(!resp.ok)throw new Error('o n8n respondeu '+resp.status+' '+(resp.statusText||'')+'. Confira se o workflow está ativo e se o método ('+m+') é o mesmo do nó Webhook.');
+  let txt;
+  if(resp.body){const total=+resp.headers.get('content-length')||0,rd=resp.body.getReader(),parts=[];let got=0,last=0;
+   for(;;){const {done,value}=await rd.read();if(done)break;parts.push(value);got+=value.length;if(Date.now()-last>250){last=Date.now();st('Baixando dados do n8n… '+(got/1048576).toFixed(1)+' MB'+(total?' de '+(total/1048576).toFixed(1)+' MB':''))}}
+   txt=await new Blob(parts).text()}
+  else txt=await resp.text();
+  st('Processando os dados…');await new Promise(r=>setTimeout(r,40));
+  let L;try{L=JSON.parse(txt)}catch(x){throw new Error('a resposta do n8n não é um JSON válido (primeiros caracteres: '+txt.slice(0,80).replace(/</g,'&lt;')+').')}
+  txt=null;
+  const extra=Array.isArray(L)?'':' <span class="neg">Atenção: o n8n devolveu um único objeto, e não a lista de parcelas. No nó Respond to Webhook, use “All Incoming Items”.</span>';
+  await finish(build(jsonToAoa(L)),'Base: n8n ('+new Date().toLocaleString('pt-BR')+')',extra)
+ }catch(x){st('<span class="neg">Não foi possível atualizar: '+x.message+'</span>')}
+ finally{clearTimeout(to);b.disabled=false}};
 $('#rst').onclick=async()=>{try{await idbOp('readwrite',s=>s.delete('base'))}catch(x){}applyBase(ORIG,'Nenhuma base carregada');st('Base removida deste navegador.')};
 (async()=>{try{const s=await idbOp('readonly',s=>s.get('base'));if(s&&s.arr){applyBase(s.arr,s.label);st('Base carregada deste navegador: '+s.label)}}catch(x){}})();
 </script></body></html>
