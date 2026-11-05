@@ -26,6 +26,14 @@ Observações:
 - O n8n precisa estar rodando no mesmo computador do navegador (ou numa URL acessível a ele). Se a página for servida por HTTPS (GitHub Pages) e o n8n estiver em `http://localhost`, o Chrome pode pedir permissão de acesso à rede local.
 - A resposta é grande (cerca de 90 MB); o download e o processamento levam alguns segundos.
 
+## Avaliar clientes dos pedidos (n8n)
+1. Monte no n8n uma rotina que consulte os pedidos no banco e termine com **Respond to Webhook** (*All Incoming Items*), no mesmo formato da base financeira: uma lista JSON com um objeto por pedido.
+2. Cole a URL do webhook no cartão **Pedidos** e clique em **Buscar pedidos e avaliar**. Antes, carregue a base financeira (botão **Atualizar dados** ou envio de arquivo).
+3. A página identifica o campo do cliente (`Cd_empresa`, `Cd_cliente`, `Cod_cliente`, `Cliente`...). Se não reconhecer, mostra os campos recebidos para você escolher, e lembra da escolha.
+4. Resultado: tabela de pedidos por cliente (quantidade, valor, nota, classe, vencido, parecer), do pior para o melhor, com o detalhe completo ao clicar. Clientes que fazem parte de uma rede de lojas são avaliados pela rede. Clientes sem histórico na base aparecem numa lista à parte.
+5. Campos opcionais que a página aproveita: valor do pedido (`Valor_pedido`, `Valor_total`, `Valor`...), número do pedido e nome do cliente.
+6. A URL de teste (`/webhook-test/...`) só responde uma vez por clique em "Execute workflow". Para uso contínuo, ative o workflow e use a URL de produção (`/webhook/...`).
+
 ## Privacidade
 - A planilha é lida no navegador e **não é enviada a nenhum servidor**.
 - A base carregada fica salva no navegador de quem usou (IndexedDB). O botão **Limpar base salva** remove.

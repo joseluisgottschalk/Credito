@@ -46,6 +46,11 @@ svg text{fill:var(--mut);font-size:10px}
 <div class="sub" id="ref"></div>
 
 <div class="card"><h2>Base de dados</h2><div class="row" style="align-items:center;margin-bottom:10px"><input type="text" id="n8u" placeholder="URL do webhook do n8n, ex.: http://localhost:5678/webhook/avaliacao-clientes" style="flex:1 1 340px;width:auto"><select id="n8m" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select><button class="p" id="upd">Atualizar dados</button></div><div class="row" style="align-items:center"><input type="file" id="upl" accept=".xlsx,.xls,.xlsm,.csv,.json,.txt" style="max-width:340px"><button id="rst">Limpar base salva</button></div><div id="st" class="sub" style="margin-top:8px"></div><div class="sub"><b>Atualizar dados</b> executa a rotina no n8n (webhook) e traz o resultado. Também dá para enviar um arquivo (planilha ou o JSON do n8n) com as colunas: Cd_empresa, Nome_completo, Nf, Complemento, Valor, Saldo, Dt_vencimento, Dt_ultima_liqui; opcional: Cd_centralizado, que reúne os clientes em rede de lojas). Os dados são lidos no seu navegador, sem passar por terceiros; a base nova fica salva neste navegador.</div></div>
+<div class="card"><h2>Pedidos</h2>
+<div class="row" style="align-items:center"><input type="text" id="pdu" placeholder="URL do webhook do n8n que consulta os pedidos, ex.: http://localhost:5678/webhook/..." style="flex:1 1 340px;width:auto"><select id="pdm" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select><button class="p" id="pdb">Buscar pedidos e avaliar</button></div>
+<div id="pdst" class="sub" style="margin-top:8px"></div><div id="pdmap" style="margin-top:6px"></div>
+<div class="sub">Busca os pedidos no n8n, identifica o cliente de cada pedido e avalia só esses clientes (redes de lojas incluídas). Requer a base financeira carregada.</div></div>
+<div id="ped"></div>
 <div class="card"><h2>1. Escolha os clientes</h2>
 <div class="row">
 <div class="sw"><input type="text" id="q" placeholder="Buscar por nome ou código e clicar para adicionar…" autocomplete="off"><div id="dd"></div></div>
@@ -233,6 +238,65 @@ $('#upd').onclick=async()=>{
   await finish(build(jsonToAoa(L)),'Base: n8n ('+new Date().toLocaleString('pt-BR')+')',extra)
  }catch(x){st('<span class="neg">Não foi possível atualizar: '+x.message+'</span>')}
  finally{clearTimeout(to);b.disabled=false}};
+
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const NK_=k=>norm(String(k)).replace(/[^a-z0-9_]/g,'');
+function pickKey(keys,exact,part){const m=keys.map(k=>[k,NK_(k)]);for(const c of exact){const f=m.find(x=>x[1]===c);if(f)return f[0]}for(const p of(part||[])){const f=m.find(x=>x[1].includes(p)&&!x[1].includes('nome'));if(f)return f[0]}return null}
+const CK_EX=['cd_empresa','cd_cliente','cdcliente','cod_cliente','codcliente','codigo_cliente','id_cliente','cliente','cd_clien','empresa','cdempresa'],
+ VK_EX=['valor_pedido','vl_pedido','vlr_pedido','valor_total','vl_total','vlr_total','total','valor','vl_liquido','valor_liquido'],
+ NK_EX=['pedido','nr_pedido','nu_pedido','num_pedido','numero_pedido','cd_pedido','id_pedido','nrpedido','numpedido'],
+ NM_EX=['nome_completo','nome_cliente','nm_cliente','razao_social','cliente_nome','nome'];
+function listOf(L){if(!Array.isArray(L)){const k=L&&typeof L==='object'?Object.keys(L).find(k=>Array.isArray(L[k])):null;L=k?L[k]:(L&&typeof L==='object'?[L]:[])}
+ return L.map(x=>x&&x.json&&typeof x.json==='object'?x.json:x).filter(x=>x&&typeof x==='object')}
+async function n8nGet(u,m,say){
+ const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),20*60*1000);
+ try{let resp;
+  try{resp=await fetch(u,{method:m,signal:ctl.signal,cache:'no-store'})}
+  catch(x){throw new Error(x.name==='AbortError'?'tempo esgotado (20 min) esperando o n8n.':'não consegui falar com o n8n. Confira se ele está rodando e a URL está certa. Na URL de teste (/webhook-test/), clique antes em “Execute workflow” no n8n: ela responde uma vez só. Confira também o CORS do nó Webhook.')}
+  if(!resp.ok)throw new Error('o n8n respondeu '+resp.status+' '+(resp.statusText||'')+'. Confira se o workflow está ativo (ou aguardando o teste) e se o método ('+m+') é o mesmo do nó Webhook.');
+  const txt=await resp.text();
+  try{return JSON.parse(txt)}catch(x){throw new Error('a resposta do n8n não é um JSON válido (primeiros caracteres: '+esc(txt.slice(0,80))+').')}
+ }finally{clearTimeout(to)}}
+const find2=t=>find(t)||(/^\d+$/.test(t)?find(strip(t)||'0'):null);
+const RISK=e=>e.sc>=70?['Adequado','var(--ok)']:e.sc>=50?['Acompanhar','var(--w)']:['Cautela','var(--bad)'];
+function showOrders(L,forced){
+ const say=t=>{$('#pdst').innerHTML=t},keys=[...new Set(L.slice(0,200).flatMap(o=>Object.keys(o)))];
+ let saved='';try{saved=localStorage.getItem('aval-ped-ck')||''}catch(x){}
+ const ck=(forced&&keys.includes(forced)?forced:null)||(keys.includes(saved)?saved:null)||pickKey(keys,CK_EX,['cliente','empresa']);
+ if(!ck){say('<span class="neg">Não identifiquei qual campo traz o código do cliente.</span> Campos recebidos: '+keys.map(esc).join(', ')+'.');
+  $('#pdmap').innerHTML='Escolha o campo do cliente: <select id="pdck">'+keys.map(k=>`<option>${esc(k)}</option>`).join('')+'</select> <button id="pdok">Usar este campo</button>';
+  $('#pdok').onclick=()=>showOrders(L,$('#pdck').value);return}
+ if(forced){try{localStorage.setItem('aval-ped-ck',forced)}catch(x){}}
+ $('#pdmap').innerHTML='';
+ const vk=pickKey(keys,VK_EX,[]),nk=pickKey(keys,NK_EX,['pedido']),mk=pickKey(keys,NM_EX,[]),G=new Map(),miss=new Map();let sem=0;
+ L.forEach(o=>{const t=o[ck]==null?'':String(o[ck]).trim();if(!t){sem++;return}
+  const c=find2(t),val=vk?num(o[vk]):0;
+  if(c){let g=G.get(c.c);if(!g)G.set(c.c,g={c,n:0,v:0});g.n++;g.v+=val}
+  else{let g=miss.get(t);if(!g)miss.set(t,g={t,nm:mk?String(o[mk]||'').trim():'',n:0,v:0});g.n++;g.v+=val}});
+ const rows=[...G.values()].map(g=>({...g,e:ev(g.c)})).sort((a,b)=>a.e.sc-b.e.sc),mis=[...miss.values()].sort((a,b)=>b.v-a.v||b.n-a.n);
+ const tv=rows.reduce((a,r)=>a+r.v,0)+mis.reduce((a,r)=>a+r.v,0),rv=rows.filter(r=>r.e.sc<50).reduce((a,r)=>a+r.v,0);
+ SEL=rows.map(r=>r.c.c);cur=SEL[0]||null;
+ say('<b>'+L.length.toLocaleString('pt-BR')+'</b> pedido(s) lidos. Campo do cliente: <b>'+esc(ck)+'</b>'+(vk?'; valor: <b>'+esc(vk)+'</b>':'; valor do pedido não identificado')+'. '+rows.length+' cliente(s) avaliado(s), '+mis.length+' sem histórico na base.'+(sem?' '+sem+' pedido(s) sem código de cliente.':'')+' <a href="#" id="pdch">Trocar campo do cliente</a>');
+ $('#pdch').onclick=ev_=>{ev_.preventDefault();try{localStorage.removeItem('aval-ped-ck')}catch(x){}$('#pdmap').innerHTML='Escolha o campo do cliente: <select id="pdck">'+keys.map(k=>`<option ${k===ck?'selected':''}>${esc(k)}</option>`).join('')+'</select> <button id="pdok">Usar este campo</button>';$('#pdok').onclick=()=>showOrders(L,$('#pdck').value)};
+ let h=`<div class="kpis" style="margin-top:14px"><div class="k"><span>Pedidos</span><strong>${L.length.toLocaleString('pt-BR')}</strong></div><div class="k"><span>Clientes avaliados</span><strong>${rows.length}</strong></div>${vk?`<div class="k"><span>Valor dos pedidos</span><strong>${brl(tv)}</strong></div><div class="k"><span>Em clientes de risco (nota abaixo de 50)</span><strong class="${rv?'neg':''}">${brl(rv)}</strong></div>`:''}<div class="k"><span>Sem histórico na base</span><strong>${mis.length}</strong></div></div>`;
+ const th=x=>`<th style="cursor:default" class="${x==='Cliente'?'l':''}">${x}</th>`;
+ h+=`<div class="card"><h2>Pedidos por cliente (do pior para o melhor, clique para detalhar)</h2><div class="tw"><table><thead><tr>${['Cliente','Pedidos'].concat(vk?['Valor']:[]).concat(['Nota','Classe','Vencido','Dias vencido','Parecer']).map(th).join('')}</tr></thead><tbody>`;
+ rows.forEach(r=>{const z=RISK(r.e);h+=`<tr data-c="${esc(r.c.c)}"><td class="l">${esc(r.c.n)}<div class="sub">${r.c.rede?'Rede de lojas · '+r.c.L.length+' clientes':esc(r.c.c)}</div></td><td>${r.n}</td>${vk?`<td>${brl(r.v)}</td>`:''}<td><b>${r.e.sc}</b></td><td>${tag(r.e)}</td><td class="${r.e.vv?'neg':''}">${brl(r.e.vv)}</td><td>${r.e.md||'—'}</td><td><b style="color:${z[1]}">${z[0]}</b></td></tr>`});
+ h+='</tbody></table></div><div class="sub" style="margin-top:6px">Parecer indicativo: Adequado (nota 70 ou mais), Acompanhar (50 a 69), Cautela (abaixo de 50).</div></div>';
+ if(mis.length)h+=`<div class="card"><h2>Clientes dos pedidos sem histórico na base (${mis.length})</h2><div class="tw"><table><thead><tr>${['Código'].concat(mk?['Nome']:[]).concat(['Pedidos']).concat(vk?['Valor']:[]).map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${mis.map(m=>`<tr><td class="l">${esc(m.t)}</td>${mk?`<td class="l">${esc(m.nm)}</td>`:''}<td>${m.n}</td>${vk?`<td>${brl(m.v)}</td>`:''}</tr>`).join('')}</tbody></table></div><div class="sub" style="margin-top:6px">Cliente novo ou com código diferente do financeiro: não há parcelas na base para avaliar a pontualidade.</div></div>`;
+ $('#ped').innerHTML=h;
+ $('#ped').querySelectorAll('tbody tr[data-c]').forEach(t=>t.onclick=()=>{cur=t.dataset.c;draw();document.getElementById('det').scrollIntoView({behavior:'smooth'})});
+ draw()}
+try{$('#pdu').value=localStorage.getItem('aval-ped-url')||'';$('#pdm').value=localStorage.getItem('aval-ped-m')||'GET'}catch(x){}
+$('#pdb').onclick=async()=>{
+ const u=$('#pdu').value.trim(),m=$('#pdm').value||'GET',b=$('#pdb'),say=t=>{$('#pdst').innerHTML=t};
+ if(!DATA.length){say('<span class="neg">Carregue antes a base financeira (Atualizar dados ou envio de arquivo).</span>');return}
+ if(!/^https?:\/\//i.test(u)){say('<span class="neg">Informe a URL do webhook do n8n (começa com http:// ou https://).</span>');return}
+ try{localStorage.setItem('aval-ped-url',u);localStorage.setItem('aval-ped-m',m)}catch(x){}
+ b.disabled=true;$('#pdmap').innerHTML='';say('Buscando pedidos no n8n…');
+ try{const L=listOf(await n8nGet(u,m,say));if(!L.length)throw new Error('o n8n não devolveu nenhum pedido.');showOrders(L)}
+ catch(x){say('<span class="neg">Não foi possível buscar os pedidos: '+x.message+'</span>')}
+ finally{b.disabled=false}};
 $('#rst').onclick=async()=>{try{await idbOp('readwrite',s=>s.delete('base'))}catch(x){}applyBase(ORIG,'Nenhuma base carregada');st('Base removida deste navegador.')};
 (async()=>{try{const s=await idbOp('readonly',s=>s.get('base'));if(s&&s.arr){applyBase(s.arr,s.label);st('Base carregada deste navegador: '+s.label)}}catch(x){}})();
 </script></body></html>
