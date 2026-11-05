@@ -169,7 +169,12 @@ top5();draw();
 const day=(y,m,d)=>Math.round((Date.UTC(y,m,d)-E)/864e5);
 function toDay(v){if(v==null||v==='')return null;if(v instanceof Date)return day(v.getFullYear(),v.getMonth(),v.getDate());if(typeof v==='number')return Math.floor(v)-43831;
  const s=String(v).trim();if(s.includes('/')){const p=s.slice(0,10).split('/');return day(+p[2],p[1]-1,+p[0])}if(s.includes('-')){const p=s.slice(0,10).split('-');return day(+p[0],p[1]-1,+p[2])}return null}
-function num(v){if(typeof v==='number')return v;const s=String(v==null?'':v).trim();if(!s)return 0;return parseFloat(s.includes(',')?s.replace(/\./g,'').replace(',','.'):s)||0}
+function num(v){if(typeof v==='number')return v;let s=String(v==null?'':v).replace(/[^\d,.\-]/g,'');if(!s)return 0;
+ const lc=s.lastIndexOf(','),ld=s.lastIndexOf('.');
+ if(lc>-1&&ld>-1)s=lc>ld?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');
+ else if(lc>-1)s=s.replace(/\./g,'').replace(',','.');
+ else if(ld>-1&&(s.match(/\./g)||[]).length>1)s=s.replace(/\./g,'');
+ return parseFloat(s)||0}
 function build(aoa){
  const h=aoa[0].map(x=>norm(String(x).trim())),I={c:'Cd_empresa',n:'Nome_completo',nf:'Nf',cp:'Complemento',v:'Dt_vencimento',l:'Dt_ultima_liqui',val:'Valor',s:'Saldo'},miss=[];
  for(const k in I){const j=h.indexOf(norm(I[k]));if(j<0)miss.push(I[k]);I[k]=j}
@@ -266,9 +271,9 @@ $('#upd').onclick=async()=>{
 
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const NK_=k=>norm(String(k)).replace(/[^a-z0-9_]/g,'');
-function pickKey(keys,exact,part){const u=s=>s.replace(/_/g,''),m=keys.map(k=>{const n=NK_(k);return[k,n,u(n)]});for(const c of exact){const f=m.find(x=>x[2]===u(c));if(f)return f[0]}for(const p of(part||[])){const f=m.find(x=>x[1].includes(p)&&!x[1].includes('nome'));if(f)return f[0]}return null}
+function pickKey(keys,exact,part,bad){const u=s=>s.replace(/_/g,''),m=keys.map(k=>{const n=NK_(k);return[k,n,u(n)]});for(const c of exact){const f=m.find(x=>x[2]===u(c));if(f)return f[0]}for(const p of(part||[])){const f=m.find(x=>x[1].includes(p)&&!x[1].includes('nome')&&!(bad||[]).some(b=>x[1].includes(b)));if(f)return f[0]}return null}
 const CK_EX=['cd_empresa','cd_cliente','cdcliente','cod_cliente','codcliente','codigo_cliente','id_cliente','cliente','cd_clien','empresa','cdempresa'],
- VK_EX=['valor_pedido','vl_pedido','vlr_pedido','valor_total','vl_total','vlr_total','total','valor','vl_liquido','valor_liquido'],
+ VK_EX=['valor_pedido','valor_do_pedido','vl_pedido','vlr_pedido','valor_total','valor_total_pedido','vl_total','vlr_total','vl_total_pedido','total_pedido','total','valor','vl_liquido','valor_liquido','vl_mercadoria','valor_mercadoria'],
  NK_EX=['pedido','nr_pedido','nu_pedido','num_pedido','numero_pedido','cd_pedido','id_pedido','nrpedido','numpedido'],
  NM_EX=['nome_completo','nome_cliente','nm_cliente','razao_social','cliente_nome','nome'];
 function listOf(L){if(!Array.isArray(L)){const k=L&&typeof L==='object'?Object.keys(L).find(k=>Array.isArray(L[k])):null;L=k?L[k]:(L&&typeof L==='object'?[L]:[])}
@@ -343,11 +348,11 @@ const PF=[
  ['cnpj','CNPJ',CNPJ_EX,['cnpj','cgc']],
  ['rep','Representante (fantasia)',['fantasia','representante_fantasia','fantasia_representante','fantasia_rep','fantasia_repres','nm_fantasia_representante','nome_fantasia_representante','representante','nome_representante','nm_representante','rep'],['repres','vendedor']],
  ['reg','Regional',['regional','nome_regional','nm_regional','regiao','cd_regional'],['regional','regiao']],
- ['val','Valor do pedido',VK_EX,[]],
+ ['val','Valor do pedido',VK_EX,['valor','vlr','vl','total'],['frete','icms','ipi','desc','unit','qtd','quant','comis','peso','imposto','taxa','juros','saldo','custo','item']],
  ['cond','Condição de pagamento',['condicao_pagamento','condicao_de_pagamento','cond_pagamento','cond_de_pagamento','cond_pgto','condicao_pgto','condpgto','cond_pagto','cond_pag','condicao','prazo_pagamento','prazo','forma_pagamento'],['cond','prazo','pgto']],
  ['obs','Observação',['observacao','observacoes','obs','obs_pedido','observacao_pedido','ds_observacao','historico'],['observ','obs']]];
 function mapFor(keys){let sv={};try{sv=JSON.parse(localStorage.getItem('aval-ped-map')||'{}')||{}}catch(x){}
- const m={};PF.forEach(([f,,ex,pt])=>{m[f]=(f in sv&&(sv[f]===''||keys.includes(sv[f])))?(sv[f]||null):pickKey(keys,ex,pt)});return m}
+ const m={};PF.forEach(([f,,ex,pt,bd])=>{m[f]=(f in sv&&(sv[f]===''||keys.includes(sv[f])))?(sv[f]||null):pickKey(keys,ex,pt,bd)});return m}
 function renderMap(){
  $('#pmapg').innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:10px">'+PF.map(([f,lab])=>`<label style="display:block"><span class="sub">${lab}${PM[f]?'':' <b class="neg">· não identificado</b>'}</span><select data-f="${f}" style="width:100%"><option value="">(nenhum)</option>${PK.map(k=>`<option ${PM[f]===k?'selected':''}>${esc(k)}</option>`).join('')}</select></label>`).join('')+'</div>'}
 const fmtCnpj=d=>d&&d.length===14?`${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`:(d||'');
@@ -396,8 +401,10 @@ function showOrders(L){
  const rows=[...G.values()].map(q=>({...q,e:ev(q.c)})).sort((a,b)=>a.e.sc-b.e.sc),mis=[...miss.values()].sort((a,b)=>b.v-a.v||b.n-a.n);
  const tv=ORDS.reduce((a,o)=>a+o.val,0),rv=rows.filter(r=>r.e.sc<50).reduce((a,r)=>a+r.v,0);
  LASTMIS=mis;const prev=cur;SEL=rows.map(r=>r.c.c);cur=SEL.includes(prev)?prev:(SEL[0]||null);
+ const falta=[['val','valor do pedido'],['cond','condição de pagamento'],['ped','pedido']].filter(([f])=>!PM[f]).map(x=>x[1]);
+ if(falta.length)$('#pmap').open=true;
  const campo=(f,l)=>l+': '+(PM[f]?'<b>'+esc(PM[f])+'</b>':'<span class="neg">não identificado</span>');
- say('<b>'+ORDS.length.toLocaleString('pt-BR')+'</b> pedido(s) lidos. '+[['cli','cliente'],['ped','pedido'],['val','valor'],['cond','condição de pagamento']].map(([f,l])=>campo(f,l)).join('; ')+'. '+rows.length+' cliente(s) avaliado(s), '+mis.length+' sem histórico na base.'+(sem?' '+sem+' pedido(s) sem código de cliente (ignorados).':'')+(dup?' '+dup+' linha(s) repetida(s) do mesmo pedido (usei a primeira).':''));
+ say('<b>'+ORDS.length.toLocaleString('pt-BR')+'</b> pedido(s) lidos. '+[['cli','cliente'],['ped','pedido'],['val','valor'],['cond','condição de pagamento']].map(([f,l])=>campo(f,l)).join('; ')+'. '+rows.length+' cliente(s) avaliado(s), '+mis.length+' sem histórico na base.'+(sem?' '+sem+' pedido(s) sem código de cliente (ignorados).':'')+(dup?' '+dup+' linha(s) repetida(s) do mesmo pedido (usei a primeira).':'')+(falta.length?' <span class="neg">Não identifiquei: '+falta.join(', ')+'.</span> Escolha o campo certo em “Campos do pedido” (já aberto abaixo). Campos recebidos: '+keys.map(esc).join(', ')+'.':''));
  let h=`<div class="kpis" style="margin-top:14px"><div class="k"><span>Pedidos</span><strong>${ORDS.length.toLocaleString('pt-BR')}</strong></div><div class="k"><span>Clientes avaliados</span><strong>${rows.length}</strong></div>${vk?`<div class="k"><span>Valor dos pedidos</span><strong>${brl(tv)}</strong></div><div class="k"><span>Em clientes de risco (nota abaixo de 50)</span><strong class="${rv?'neg':''}">${brl(rv)}</strong></div>`:''}<div class="k"><span>Sem histórico na base</span><strong>${mis.length}</strong></div></div><div id="pedo"></div>`;
 
  if(mis.length){const hc=mis.some(m=>m.cnpj),he=mis.some(m=>ECO[m.t]),hs=mis.some(m=>ECO[m.t]&&ECO[m.t].sit);
