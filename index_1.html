@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Avaliação de clientes por pontualidade. Arquivo único, sem dependências além do SheetJS (cdnjs). Os dados são lidos no navegador e não saem dele. -->
+<title>Avaliação de clientes por pontualidade</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f5f6f8;--card:#fff;--tx:#1b2430;--mut:#6a7686;--bd:#e1e5eb;--ac:#2456d6;--ok:#1a9a5b;--b:#6aa84f;--w:#e0a100;--r:#e07020;--bad:#d03a3a;--sh:0 1px 2px rgba(0,0,0,.05)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121519;--card:#1b2027;--tx:#e7ebf0;--mut:#98a3b3;--bd:#2b323c;--ac:#6b96ff;--ok:#3ecf8e;--b:#8fcf6a;--w:#f0b429;--r:#f08a45;--bad:#f06a6a}}
+:root[data-theme="dark"]{--bg:#121519;--card:#1b2027;--tx:#e7ebf0;--mut:#98a3b3;--bd:#2b323c;--ac:#6b96ff;--ok:#3ecf8e;--b:#8fcf6a;--w:#f0b429;--r:#f08a45;--bad:#f06a6a}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0 0 2px}h2{font-size:15px;margin:0 0 10px}.sub{color:var(--mut);font-size:12.5px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-top:14px;box-shadow:var(--sh)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}
+.sw{position:relative;flex:1 1 280px}
+input[type=text],textarea{width:100%;padding:9px 11px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+textarea{min-height:110px;resize:vertical}#msg{font-size:12.5px;color:var(--mut);margin-top:8px}
+select{padding:9px 8px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+button:disabled{opacity:.6;cursor:wait}
+button{font:inherit;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:8px;padding:8px 12px;cursor:pointer}
+button.p{background:var(--ac);border-color:var(--ac);color:#fff}
+#dd{position:absolute;left:0;right:0;top:100%;z-index:20;background:var(--card);border:1px solid var(--bd);border-radius:8px;max-height:260px;overflow:auto;box-shadow:0 6px 18px rgba(0,0,0,.18);display:none}
+#dd div{padding:8px 11px;cursor:pointer;border-bottom:1px solid var(--bd)}#dd div:hover{background:var(--bg)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{display:inline-flex;gap:6px;align-items:center;background:var(--bg);border:1px solid var(--bd);border-radius:99px;padding:3px 6px 3px 10px;font-size:12.5px}
+.chip b{cursor:pointer;color:var(--mut)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.k{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px 12px}.k span{display:block;color:var(--mut);font-size:12px}.k strong{font-size:18px}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--bd);white-space:nowrap}th:first-child,td:first-child,.l{text-align:left}
+th{color:var(--mut);font-weight:600;cursor:pointer;user-select:none}tbody tr.sel{background:color-mix(in srgb,var(--ac) 10%,transparent)}
+tbody tr{cursor:pointer}
+.tag{display:inline-block;padding:2px 9px;border-radius:99px;color:#fff;font-weight:600;font-size:12px}
+.bar{display:inline-block;height:7px;border-radius:4px;vertical-align:middle;margin-right:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.big{font-size:44px;font-weight:700;line-height:1}
+.neg{color:var(--bad)}.pos{color:var(--ok)}
+ul.p{margin:6px 0 0;padding-left:18px}
+details{margin-top:12px;color:var(--mut);font-size:12.5px}
+svg text{fill:var(--mut);font-size:10px}
+.emp{color:var(--mut);padding:14px 0}
+</style><script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script></head><body><div class="wrap">
+<h1>Avaliação de clientes por pontualidade</h1>
+<div class="sub" id="ref"></div>
+
+<div class="card"><h2>Base de dados</h2><div class="row" style="align-items:center;margin-bottom:10px"><input type="text" id="n8u" placeholder="URL do webhook do n8n, ex.: http://localhost:5678/webhook/avaliacao-clientes" style="flex:1 1 340px;width:auto"><select id="n8m" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select><button class="p" id="upd">Atualizar dados</button></div><div class="row" style="align-items:center"><input type="file" id="upl" accept=".xlsx,.xls,.xlsm,.csv,.json,.txt" style="max-width:340px"><button id="rst">Limpar base salva</button></div><div id="st" class="sub" style="margin-top:8px"></div><div class="sub"><b>Atualizar dados</b> executa a rotina no n8n (webhook) e traz o resultado. Também dá para enviar um arquivo (planilha ou o JSON do n8n) com as colunas: Cd_empresa, Nome_completo, Nf, Complemento, Valor, Saldo, Dt_vencimento, Dt_ultima_liqui; opcional: Cd_centralizado, que reúne os clientes em rede de lojas). Os dados são lidos no seu navegador, sem passar por terceiros; a base nova fica salva neste navegador.</div></div>
+<div class="card"><h2>Pedidos</h2>
+<div class="row" style="align-items:center"><input type="text" id="pdu" placeholder="URL do webhook do n8n que consulta os pedidos, ex.: http://localhost:5678/webhook/..." style="flex:1 1 340px;width:auto"><select id="pdm" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select><button class="p" id="pdb">Buscar pedidos e avaliar</button></div>
+<div id="pdst" class="sub" style="margin-top:8px"></div><div id="pdmap" style="margin-top:6px"></div>
+<div class="sub">Busca os pedidos no n8n, identifica o cliente de cada pedido e avalia só esses clientes (redes de lojas incluídas). Requer a base financeira carregada.</div></div>
+<div id="ped"></div>
+<div class="card"><h2>1. Escolha os clientes</h2>
+<div class="row">
+<div class="sw"><input type="text" id="q" placeholder="Buscar por nome ou código e clicar para adicionar…" autocomplete="off"><div id="dd"></div></div>
+<div class="sw" style="flex:2 1 320px"><textarea id="bulk" placeholder="Cole aqui vários clientes de uma vez: códigos ou nomes, um por linha (pode colar direto uma coluna do Excel) ou separados por vírgula ou ponto e vírgula. Nome parcial também funciona se achar um só cliente."></textarea><div id="msg"></div></div>
+<div style="display:flex;flex-direction:column;gap:6px"><button class="p" id="add">Adicionar lista</button><button id="top">+ Maiores vencidos</button><button id="clr">Limpar</button></div>
+</div><div class="chips" id="chips"></div></div>
+
+<div id="res"></div>
+<details class="card"><summary>Como a nota é calculada</summary>
+<p><b>Nota de 0 a 100</b> = pontualidade histórica (40) + intensidade do atraso (30) + situação atual (30).</p>
+<ul><li><b>Pontualidade histórica:</b> % das parcelas liquidadas até 3 dias após o vencimento (liquidação antecipada conta como em dia).</li>
+<li><b>Intensidade do atraso:</b> atraso médio nas parcelas liquidadas, contando 0 para as pagas em dia; 30 dias ou mais de média zera os pontos.</li>
+<li><b>Situação atual:</b> parcelas com saldo maior que zero estão em aberto. Perdem pontos o maior tempo vencido (até 90 dias) e o % do valor vencido sobre o valor total da base (10% ou mais tira tudo).</li></ul>
+<p>Classes: A Excelente (85 ou mais), B Bom (70–84), C Atenção (50–69), D Risco alto (30–49), E Crítico (abaixo de 30). Parcelas baixadas sem data de liquidação e datas de liquidação futuras (erro de digitação) ficam fora do cálculo de pontualidade. Com menos de 3 parcelas liquidadas, a nota é indicativa.</p><p><b>Redes de lojas:</b> quando a coluna Cd_centralizado está preenchida, os clientes com o mesmo valor são avaliados juntos como uma rede (histórico e parcelas em aberto somados). A tela da rede mostra também a nota de cada loja. Campo vazio ou 0 significa cliente avaliado individualmente.</p></details>
+</div>
+<script>
+let DATA=[];
+const E=Date.UTC(2020,0,1),now=new Date(),TODAY=Math.round((Date.UTC(now.getFullYear(),now.getMonth(),now.getDate())-E)/864e5);
+const $=s=>document.querySelector(s),brl=v=>v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const fd=n=>n?new Date(E+n*864e5).toLocaleDateString('pt-BR',{timeZone:'UTC'}):'—';
+const MN=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const CL=[[85,'A','Excelente','var(--ok)'],[70,'B','Bom','var(--b)'],[50,'C','Atenção','var(--w)'],[30,'D','Risco alto','var(--r)'],[-1,'E','Crítico','var(--bad)']];
+let BASE='Nenhuma base carregada';const ORIG=DATA;DATA=groupRedes(ORIG);function refInfo(){$('#ref').textContent='Posição em '+fd(TODAY)+' · '+DATA.length.toLocaleString('pt-BR')+' clientes/redes na base · '+BASE}refInfo();
+let byCode={};function idx(){byCode={};DATA.forEach(c=>{byCode[c.c]=c;c.s=norm(c.n+' '+c.c+(c.rede?' '+c.g+' '+c.L.map(x=>x.n+' '+x.c).join(' '):''))});DATA.forEach(c=>{if(c.rede){if(!byCode[c.g])byCode[c.g]=c;c.L.forEach(x=>{if(!byCode[x.c])byCode[x.c]=c})}})}idx();
+function norm(s){return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
+function ev(c){
+ if(c._e)return c._e;
+ const op=c.o,ven=op.filter(p=>p[2]<TODAY),av=op.filter(p=>p[2]>=TODAY);
+ const vv=ven.reduce((a,p)=>a+p[4],0),va=av.reduce((a,p)=>a+p[4],0),md=ven.length?Math.max(...ven.map(p=>TODAY-p[2])):0;
+ const n=c.k,ok=c.b[0]+c.b[1],base=c.vp+ven.reduce((a,p)=>a+p[3],0);
+ const A=n?40*ok/n:20,B=n?30*Math.max(0,1-(c.sp/n)/30):15;
+ const C=30-15*Math.min(1,md/90)-15*Math.min(1,(base?vv/base:0)/.10);
+ const sc=Math.round(A+B+C),cls=CL.find(x=>sc>=x[0]);
+ return c._e={sc,cls,n,pok:n?ok/n:null,am:n?c.sp/n:null,mx:c.mx,vv,nv:ven.length,va,na:av.length,md,ven,av,tot:vv+va,fraco:n<3};
+}
+let SEL=[],cur=null,sortK='sc',sortD=1;
+function add(c){if(c&&!SEL.includes(c.c)){SEL.push(c.c);cur=cur||c.c}}
+function find(t){t=t.trim();if(!t)return null;if(byCode[t])return byCode[t];const z=t.padStart(6,'0');if(/^\d+$/.test(t)&&byCode[z])return byCode[z];const n=norm(t);return DATA.find(c=>norm(c.n)===n)||DATA.find(c=>c.rede&&c.L.some(x=>norm(x.n)===n))||null}
+const q=$('#q'),dd=$('#dd');
+q.oninput=()=>{const t=norm(q.value.trim());if(t.length<2){dd.style.display='none';return}
+ const r=DATA.filter(c=>c.s.includes(t)).slice(0,15);
+ dd.innerHTML=r.map(c=>`<div data-c="${c.c}">${c.n} <span class="sub">· ${c.c}</span></div>`).join('')||'<div class="sub">Nenhum cliente encontrado</div>';dd.style.display='block'};
+dd.onclick=e=>{const c=byCode[e.target.closest('[data-c]')?.dataset.c];if(c){add(c);q.value='';dd.style.display='none';draw()}};
+document.addEventListener('click',e=>{if(!e.target.closest('.sw'))dd.style.display='none'});
+$('#add').onclick=()=>{const miss=[],amb=[];let ok=0;
+ [...new Set($('#bulk').value.split(/[\n\t;,]+/).map(x=>x.trim()).filter(Boolean))].forEach(t=>{const c=find(t);if(c){add(c);ok++;return}
+  const n=norm(t),m=n.length>=3?DATA.filter(x=>x.s.includes(n)):[];
+  if(m.length===1){add(m[0]);ok++}else if(m.length>1)amb.push(t);else miss.push(t)});
+ $('#bulk').value=miss.concat(amb).join('\n');
+ $('#msg').innerHTML='<b>'+ok+'</b> cliente(s) adicionado(s).'+(miss.length?' Não encontrados: '+miss.join(', ')+'.':'')+(amb.length?' Mais de uma correspondência (use a busca para escolher): '+amb.join(', ')+'.':'');
+ draw()};
+$('#top').onclick=()=>{DATA.slice().sort((a,b)=>ev(b).vv-ev(a).vv).slice(0,8).forEach(add);draw()};
+$('#clr').onclick=()=>{SEL=[];cur=null;draw()};
+function tag(e){return `<span class="tag" style="background:${e.cls[3]}">${e.cls[1]} · ${e.cls[2]}</span>`}
+function draw(){
+ $('#chips').innerHTML=SEL.map(c=>`<span class="chip">${byCode[c].n}<b data-x="${c}">✕</b></span>`).join('');
+ $('#chips').onclick=e=>{const x=e.target.dataset.x;if(x){SEL=SEL.filter(c=>c!==x);if(cur===x)cur=SEL[0]||null;draw()}};
+ const R=$('#res');if(!SEL.length){R.innerHTML=!DATA.length?'<div class="card emp">Nenhuma base carregada. Use o campo “Base de dados” acima para enviar a planilha de financeiro dos clientes.</div>':'<div class="card emp">Nenhum cliente selecionado. Busque pelo nome ou código, cole uma lista ou use “Maiores vencidos” para começar.</div>';return}
+ const L=SEL.map(c=>byCode[c]),ES=L.map(ev),vv=ES.reduce((a,e)=>a+e.vv,0),tot=ES.reduce((a,e)=>a+e.tot,0);
+ const rows=L.map((c,i)=>({c,e:ES[i]})).sort((a,b)=>{const g=x=>x.e[sortK]??-1;return (g(a)-g(b))*sortD||0});
+ const H=[['n','Cliente'],['sc','Nota'],['cl','Classe'],['pok','% em dia'],['am','Atraso médio'],['mx','Maior atraso'],['n','Liquidadas'],['tot','Em aberto'],['vv','Vencido'],['md','Dias vencido']];
+ let h=`<div class="kpis" style="margin-top:14px"><div class="k"><span>Clientes avaliados</span><strong>${L.length}</strong></div><div class="k"><span>Nota média</span><strong>${Math.round(ES.reduce((a,e)=>a+e.sc,0)/ES.length)}</strong></div><div class="k"><span>Saldo em aberto</span><strong>${brl(tot)}</strong></div><div class="k"><span>Vencido</span><strong class="${vv?'neg':''}">${brl(vv)}</strong></div></div>`;
+ h+=`<div class="card"><h2>2. Comparativo (clique no cliente para detalhar)</h2><div class="tw"><table><thead><tr>${H.map((x,i)=>`<th data-k="${['n','sc','sc','pok','am','mx','n','tot','vv','md'][i]}" class="${i==0?'l':''}">${x[1]}${sortK===['n','sc','sc','pok','am','mx','n','tot','vv','md'][i]?(sortD>0?' ↑':' ↓'):''}</th>`).join('')}</tr></thead><tbody>`;
+ rows.forEach(({c,e})=>{h+=`<tr data-c="${c.c}" class="${c.c===cur?'sel':''}"><td class="l">${c.n}<div class="sub">${c.rede?'Rede de lojas · '+c.L.length+' clientes · centralizado '+c.g:c.c}</div></td><td><span class="bar" style="width:${e.sc*.6}px;background:${e.cls[3]}"></span><b>${e.sc}</b></td><td>${tag(e)}</td><td>${e.pok==null?'—':(e.pok*100).toFixed(0)+'%'}</td><td>${e.am==null?'—':e.am.toFixed(1)+' d'}</td><td>${e.n?Math.max(0,e.mx)+' d':'—'}</td><td>${e.n}</td><td>${brl(e.tot)}</td><td class="${e.vv?'neg':''}">${brl(e.vv)}</td><td>${e.md||'—'}</td></tr>`});
+ h+='</tbody></table></div></div><div id="det"></div>';R.innerHTML=h;
+ R.querySelectorAll('th').forEach(t=>t.onclick=()=>{const k=t.dataset.k;sortD=sortK===k?-sortD:-1;sortK=k;draw()});
+ R.querySelectorAll('tbody tr').forEach(t=>t.onclick=()=>{cur=t.dataset.c;draw();document.getElementById('det').scrollIntoView({behavior:'smooth'})});
+ detail(byCode[cur||SEL[0]]);
+}
+function bars(vals,labels,color,unit){const mx=Math.max(1,...vals.map(Math.abs)),w=Math.max(280,vals.length*34);
+ return `<div class="tw"><svg viewBox="0 0 ${w} 150" width="100%" style="min-width:${w}px">${vals.map((v,i)=>{const hh=Math.abs(v)/mx*95;return `<rect x="${i*34+6}" y="${110-hh}" width="22" height="${hh}" rx="3" fill="${Array.isArray(color)?color[i]:color}"/><text x="${i*34+17}" y="${104-hh}" text-anchor="middle">${v?Math.round(v*10)/10+unit:''}</text><text x="${i*34+17}" y="128" text-anchor="middle">${labels[i]}</text>`}).join('')}</svg></div>`}
+function detail(c){
+ const e=ev(c),P=$('#det'),bl=['até 0','1–3','4–15','16–30','31–60','61–90','>90'],bc=['var(--ok)','var(--ok)','var(--w)','var(--r)','var(--bad)','var(--bad)','var(--bad)'];
+ const pts=[];
+ if(e.n)pts.push(`${(e.pok*100).toFixed(0)}% das ${e.n} parcelas liquidadas foram pagas em dia (até 3 dias de tolerância); o atraso médio é de ${e.am.toFixed(1)} dias e o maior atraso foi de ${Math.max(0,e.mx)} dias.`);else pts.push('Não há parcelas liquidadas com data válida: a avaliação se apoia apenas na situação atual.');
+ if(e.fraco)pts.push('Histórico curto (menos de 3 parcelas liquidadas): trate a nota como indicativa.');
+ if(e.nv)pts.push(`Há ${e.nv} parcela(s) vencida(s) em aberto, somando ${brl(e.vv)}, a mais antiga com ${e.md} dias de atraso.`);else pts.push('Nenhuma parcela vencida em aberto.');
+ if(e.na)pts.push(`${e.na} parcela(s) a vencer, somando ${brl(e.va)}.`);
+ const lim=e.sc>=70?'Perfil adequado para manter ou ampliar condições.':e.sc>=50?'Recomenda-se acompanhamento e atenção ao limite de crédito.':'Recomenda-se cautela: avaliar restrição de crédito ou venda com garantia.';
+ const m=c.m.slice().sort((a,b)=>a[0]-b[0]),ml=m.map(x=>MN[x[0]%12]+'/'+String(Math.floor(x[0]/12)).slice(2));
+ const tb=(h,rs)=>`<div class="tw"><table><thead><tr>${h.map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${rs}</tbody></table></div>`;
+ const nm={};if(c.rede)c.L.forEach(x=>nm[x.c]=x.n);const lc=code=>c.rede?`<td class="l">${nm[code]||code}</td>`:'',lh=c.rede?['Loja']:[];
+ const lojas=c.rede?`<div class="card"><h2>Lojas da rede (${c.L.length}), da pior para a melhor nota</h2>`+tb(['Loja','Nota','Classe','% em dia','Em aberto','Vencido','Dias vencido'],c.L.map(x=>({x,e:ev(x)})).sort((a,b)=>a.e.sc-b.e.sc).map(({x,e:z})=>`<tr><td class="l">${x.n}<div class="sub">${x.c}</div></td><td><b>${z.sc}</b></td><td>${tag(z)}</td><td>${z.pok==null?'—':(z.pok*100).toFixed(0)+'%'}</td><td>${brl(z.tot)}</td><td class="${z.vv?'neg':''}">${brl(z.vv)}</td><td>${z.md||'—'}</td></tr>`).join(''))+'</div>':'';
+ const op=e.ven.concat(e.av).map(p=>{const d=TODAY-p[2];return `<tr>${lc(p[6])}<td>${p[0]}${p[1]?'/'+p[1]:''}</td><td>${fd(p[2])}</td><td>${brl(p[3])}</td><td>${brl(p[4])}</td><td>${p[5]?fd(p[5]):'—'}</td><td class="${d>0?'neg':''}">${d>0?d+' d vencida':'a vencer'}</td></tr>`}).join('');
+ const rc=c.r.map(p=>{const l=p[4]-p[2];return `<tr>${lc(p[5])}<td>${p[0]}${p[1]?'/'+p[1]:''}</td><td>${fd(p[2])}</td><td>${fd(p[4])}</td><td>${brl(p[3])}</td><td class="${l>3?'neg':'pos'}">${l>0?'+'+l:l} d</td></tr>`}).join('');
+ P.innerHTML=`<div class="card"><h2>3. Análise do cliente</h2><div class="row"><div style="flex:1 1 260px"><div style="font-weight:600">${c.n}</div><div class="sub">${c.rede?'Rede de lojas · '+c.L.length+' clientes · centralizado '+c.g:'Código '+c.c}</div><div style="margin:10px 0"><span class="big" style="color:${e.cls[3]}">${e.sc}</span><span class="sub"> / 100</span> &nbsp;${tag(e)}</div></div>
+ <div style="flex:2 1 320px"><ul class="p">${pts.map(x=>`<li>${x}</li>`).join('')}</ul><p style="margin:8px 0 0"><b>${lim}</b></p></div></div></div>${lojas}
+ <div class="grid"><div class="card"><h2>Dias de atraso nas parcelas liquidadas</h2>${bars(c.b,bl,bc,'')}<div class="sub">Quantidade de parcelas por faixa de dias após o vencimento.</div></div>
+ <div class="card"><h2>Atraso médio por mês de vencimento</h2>${m.length?bars(m.map(x=>x[3]/x[1]),ml,'var(--ac)',''):'<div class="emp">Sem liquidações nos últimos 24 meses.</div>'}<div class="sub">Dias de atraso médio das parcelas liquidadas (0 = em dia).</div></div></div>
+ <div class="card"><h2>Parcelas em aberto (saldo maior que zero)</h2>${e.nv+e.na?tb(lh.concat(['NF/parcela','Vencimento','Valor','Saldo','Última liquidação','Situação']),op):'<div class="emp">Cliente sem parcelas em aberto.</div>'}</div>
+ <div class="card"><h2>Últimas liquidações</h2>${c.r.length?tb(lh.concat(['NF/parcela','Vencimento','Liquidação','Valor','Dif.']),rc):'<div class="emp">Sem liquidações registradas.</div>'}</div>`;
+}
+function top5(){DATA.slice().sort((a,b)=>ev(b).vv-ev(a).vv).slice(0,5).forEach(add)}
+top5();draw();
+const day=(y,m,d)=>Math.round((Date.UTC(y,m,d)-E)/864e5);
+function toDay(v){if(v==null||v==='')return null;if(v instanceof Date)return day(v.getFullYear(),v.getMonth(),v.getDate());if(typeof v==='number')return Math.floor(v)-43831;
+ const s=String(v).trim();if(s.includes('/')){const p=s.slice(0,10).split('/');return day(+p[2],p[1]-1,+p[0])}if(s.includes('-')){const p=s.slice(0,10).split('-');return day(+p[0],p[1]-1,+p[2])}return null}
+function num(v){if(typeof v==='number')return v;const s=String(v==null?'':v).trim();if(!s)return 0;return parseFloat(s.includes(',')?s.replace(/\./g,'').replace(',','.'):s)||0}
+function build(aoa){
+ const h=aoa[0].map(x=>norm(String(x).trim())),I={c:'Cd_empresa',n:'Nome_completo',nf:'Nf',cp:'Complemento',v:'Dt_vencimento',l:'Dt_ultima_liqui',val:'Valor',s:'Saldo'},miss=[];
+ for(const k in I){const j=h.indexOf(norm(I[k]));if(j<0)miss.push(I[k]);I[k]=j}
+ if(miss.length)return{err:'Colunas não encontradas: '+miss.join(', ')+'.'};
+ const jg=h.indexOf('cd_centralizado'),M=new Map(),tm=new Date(),minym=tm.getFullYear()*12+tm.getMonth()-23;let fut=0,nod=0,lin=0;
+ for(let i=1;i<aoa.length;i++){const r=aoa[i];if(!r||r[I.c]==null||r[I.c]==='')continue;
+  const v=toDay(r[I.v]);if(v==null)continue;lin++;
+  const code=String(r[I.c]).trim();let o=M.get(code);
+  if(!o){o={c:code,n:'',k:0,b:[0,0,0,0,0,0,0],v:[0,0,0,0,0,0,0],sp:0,mx:-9999,vp:0,o:[],m:{},r:[]};M.set(code,o)}
+  if(!o.n&&r[I.n])o.n=String(r[I.n]).trim();
+  if(jg>=0&&!o.g){const gv=strip(String(r[jg]==null?'':r[jg]).trim());if(gv)o.g=gv}
+  const l=toDay(r[I.l]),val=num(r[I.val]),sal=num(r[I.s]),nf=parseInt(r[I.nf])||0,cp=String(r[I.cp]==null?'':r[I.cp]).trim();
+  if(sal>0){o.o.push([nf,cp,v,val,sal,l==null?0:l])}
+  else if(l==null)nod++;
+  else if(l>TODAY)fut++;
+  else{const lag=l-v,b=lag<=0?0:lag<=3?1:lag<=15?2:lag<=30?3:lag<=60?4:lag<=90?5:6;
+   o.k++;o.b[b]++;o.v[b]+=val;o.sp+=Math.max(0,lag);if(lag>o.mx)o.mx=lag;o.vp+=val;
+   const d=new Date(E+v*864e5),ym=d.getUTCFullYear()*12+d.getUTCMonth();
+   if(ym>=minym){const m=o.m[ym]||(o.m[ym]=[ym,0,0,0]);m[1]++;if(lag<=3)m[2]++;m[3]+=Math.max(0,lag)}
+   o.r.push([nf,cp,v,val,l]);if(o.r.length>40){o.r.sort((a,b)=>b[4]-a[4]);o.r.length=10}}}
+ const arr=[...M.values()].map(o=>{o.m=Object.values(o.m);o.o.sort((a,b)=>a[2]-b[2]);o.r.sort((a,b)=>b[4]-a[4]);o.r.length=Math.min(10,o.r.length);if(!o.k)o.mx=0;o.v=o.v.map(x=>Math.round(x*100)/100);o.vp=Math.round(o.vp*100)/100;if(!o.n)o.n=o.c;return o}).sort((a,b)=>a.n<b.n?-1:a.n>b.n?1:0);
+ return{arr,lin,fut,nod,hasG:jg>=0}}
+function strip(s){return s.replace(/^0+/,'')}
+function groupRedes(arr){const P={},out=[],G=new Set(),by={},Gm=new Map();
+ const f=k=>{if(P[k]===undefined)P[k]=k;let r=k;while(P[r]!==r)r=P[r];while(P[k]!==r){const n=P[k];P[k]=r;k=n}return r};
+ arr.forEach(c=>{const k=strip(c.c);by[k]=c;if(c.g){G.add(c.g);const a=f(k),b=f(c.g);if(a!==b)P[a]=b}});
+ arr.forEach(c=>{const k=strip(c.c);if(c.g||G.has(k)){const r=f(k);if(!Gm.has(r))Gm.set(r,[]);Gm.get(r).push(c)}else out.push(c)});
+ Gm.forEach(L=>{const cnt={};L.forEach(x=>{if(x.g)cnt[x.g]=(cnt[x.g]||0)+1});const g=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+  const mt=L.find(x=>strip(x.c)===g),big=L.slice().sort((a,b)=>b.vp-a.vp)[0];
+  const R={c:'R'+g,g,rede:true,n:'Rede '+(mt?mt.n:big.n),k:0,b:[0,0,0,0,0,0,0],v:[0,0,0,0,0,0,0],sp:0,mx:-9999,vp:0,o:[],m:[],r:[],L},M={};
+  L.forEach(x=>{R.k+=x.k;x.b.forEach((q,i)=>{R.b[i]+=q;R.v[i]+=x.v[i]});R.sp+=x.sp;if(x.k&&x.mx>R.mx)R.mx=x.mx;R.vp+=x.vp;
+   x.o.forEach(p=>R.o.push(p.concat([x.c])));x.r.forEach(p=>R.r.push(p.concat([x.c])));
+   x.m.forEach(p=>{const q=M[p[0]]||(M[p[0]]=[p[0],0,0,0]);q[1]+=p[1];q[2]+=p[2];q[3]+=p[3]})});
+  if(!R.k)R.mx=0;R.o.sort((a,b)=>a[2]-b[2]);R.r.sort((a,b)=>b[4]-a[4]);R.r.length=Math.min(10,R.r.length);R.m=Object.values(M);out.push(R)});
+ return out.sort((a,b)=>a.n<b.n?-1:a.n>b.n?1:0)}
+function applyBase(arr,label){DATA=groupRedes(arr);BASE=label;idx();SEL=[...new Set(SEL.map(c=>byCode[c]&&byCode[c].c).filter(Boolean))];cur=byCode[cur]?byCode[cur].c:SEL[0]||null;if(!SEL.length)top5();refInfo();draw()}
+function idb(){return new Promise((ok,no)=>{const q=indexedDB.open('aval-clientes',1);q.onupgradeneeded=()=>q.result.createObjectStore('k');q.onsuccess=()=>ok(q.result);q.onerror=()=>no(q.error)})}
+async function idbOp(mode,fn){const d=await idb();return new Promise((ok,no)=>{const t=d.transaction('k',mode),rq=fn(t.objectStore('k'));t.oncomplete=()=>ok(rq&&rq.result);t.onerror=()=>no(t.error)})}
+const st=t=>{$('#st').innerHTML=t};
+function jsonToAoa(L){
+ if(!Array.isArray(L)){const k=L&&typeof L==='object'?Object.keys(L).find(k=>Array.isArray(L[k])):null;L=k?L[k]:(L&&typeof L==='object'?[L]:[])}
+ L=L.map(x=>x&&x.json&&typeof x.json==='object'?x.json:x).filter(x=>x&&typeof x==='object');
+ if(!L.length)throw new Error('O JSON não tem nenhum registro.');
+ const H=['Cd_empresa','Nome_completo','Nf','Complemento','Dt_vencimento','Dt_ultima_liqui','Valor','Saldo','Cd_centralizado'],map={};
+ for(let i=0;i<Math.min(L.length,200);i++)Object.keys(L[i]).forEach(k=>{const n=norm(k).trim();if(!(n in map))map[n]=k});
+ const ks=H.map(x=>map[norm(x)]),out=new Array(L.length+1);out[0]=H;
+ for(let i=0;i<L.length;i++){const o=L[i];out[i+1]=ks.map(k=>k==null?null:o[k])}
+ return out}
+async function finish(R,label,extra){
+ if(R.err)throw new Error(R.err);
+ applyBase(R.arr,label);
+ let sv='';try{await idbOp('readwrite',s=>s.put({arr:R.arr,label},'base'))}catch(x){sv=' Não foi possível salvar no navegador: a base vale só nesta sessão.'}
+ const rd=DATA.filter(c=>c.rede);
+ st('<b>Base atualizada.</b> '+R.lin.toLocaleString('pt-BR')+' parcelas lidas, '+R.arr.length.toLocaleString('pt-BR')+' clientes.'+(R.hasG?' Cd_centralizado encontrado: '+rd.length+' rede(s) de lojas, reunindo '+rd.reduce((a,c)=>a+c.L.length,0)+' clientes.':' Coluna Cd_centralizado não encontrada: todos os clientes foram avaliados individualmente.')+(R.nod?' '+R.nod+' baixadas sem data de liquidação (fora da pontualidade).':'')+(R.fut?' '+R.fut+' com data de liquidação futura (ignoradas).':'')+sv+(extra||''))}
+$('#upl').onchange=async e=>{const f=e.target.files[0];if(!f)return;st('Lendo '+f.name+', aguarde…');
+ try{if(/\.(json|txt)$/i.test(f.name)){e.target.value='';await new Promise(r=>setTimeout(r,40));let L;try{L=JSON.parse(await f.text())}catch(x){throw new Error('o arquivo não é um JSON válido.')}
+  await finish(build(jsonToAoa(L)),'Base: '+f.name+' ('+new Date().toLocaleDateString('pt-BR')+')');return}
+  if(!window.XLSX)throw new Error('A biblioteca de leitura de planilhas não carregou. Recarregue a página.');
+  await new Promise(r=>setTimeout(r,40));
+  const wb=XLSX.read(await f.arrayBuffer(),{type:'array'});
+  const nm=wb.SheetNames.find(n=>{const a=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,range:0,defval:null})[0]||[];return a.some(x=>norm(String(x)).trim()==='cd_empresa')})||wb.SheetNames[0];
+  await finish(build(XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,raw:true,defval:null})),'Base: '+f.name+' ('+new Date().toLocaleDateString('pt-BR')+')');
+ }catch(x){st('<span class="neg">Não foi possível atualizar: '+x.message+'</span>')}
+ e.target.value=''};
+const UK='aval-n8n-url',MK='aval-n8n-m';
+try{$('#n8u').value=localStorage.getItem(UK)||'';$('#n8m').value=localStorage.getItem(MK)||'GET'}catch(x){}
+$('#upd').onclick=async()=>{
+ const u=$('#n8u').value.trim(),m=$('#n8m').value||'GET',b=$('#upd');
+ if(!/^https?:\/\//i.test(u)){st('<span class="neg">Informe a URL do webhook do n8n (começa com http:// ou https://).</span>');return}
+ try{localStorage.setItem(UK,u);localStorage.setItem(MK,m)}catch(x){}
+ b.disabled=true;st('Executando a rotina no n8n… isso pode levar alguns minutos.');
+ const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),20*60*1000);
+ try{
+  let resp;
+  try{resp=await fetch(u,{method:m,signal:ctl.signal,cache:'no-store'})}
+  catch(x){throw new Error(x.name==='AbortError'?'tempo esgotado (20 min) esperando o n8n.':'não consegui falar com o n8n. Confira se ele está rodando, se a URL está certa, se o workflow está ativo (use a URL de produção, /webhook/, e não /webhook-test/) e se o CORS do nó Webhook permite esta página.')}
+  if(!resp.ok)throw new Error('o n8n respondeu '+resp.status+' '+(resp.statusText||'')+'. Confira se o workflow está ativo e se o método ('+m+') é o mesmo do nó Webhook.');
+  let txt;
+  if(resp.body){const total=+resp.headers.get('content-length')||0,rd=resp.body.getReader(),parts=[];let got=0,last=0;
+   for(;;){const {done,value}=await rd.read();if(done)break;parts.push(value);got+=value.length;if(Date.now()-last>250){last=Date.now();st('Baixando dados do n8n… '+(got/1048576).toFixed(1)+' MB'+(total?' de '+(total/1048576).toFixed(1)+' MB':''))}}
+   txt=await new Blob(parts).text()}
+  else txt=await resp.text();
+  st('Processando os dados…');await new Promise(r=>setTimeout(r,40));
+  let L;try{L=JSON.parse(txt)}catch(x){throw new Error('a resposta do n8n não é um JSON válido (primeiros caracteres: '+txt.slice(0,80).replace(/</g,'&lt;')+').')}
+  txt=null;
+  const extra=Array.isArray(L)?'':' <span class="neg">Atenção: o n8n devolveu um único objeto, e não a lista de parcelas. No nó Respond to Webhook, use “All Incoming Items”.</span>';
+  await finish(build(jsonToAoa(L)),'Base: n8n ('+new Date().toLocaleString('pt-BR')+')',extra)
+ }catch(x){st('<span class="neg">Não foi possível atualizar: '+x.message+'</span>')}
+ finally{clearTimeout(to);b.disabled=false}};
+
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const NK_=k=>norm(String(k)).replace(/[^a-z0-9_]/g,'');
+function pickKey(keys,exact,part){const m=keys.map(k=>[k,NK_(k)]);for(const c of exact){const f=m.find(x=>x[1]===c);if(f)return f[0]}for(const p of(part||[])){const f=m.find(x=>x[1].includes(p)&&!x[1].includes('nome'));if(f)return f[0]}return null}
+const CK_EX=['cd_empresa','cd_cliente','cdcliente','cod_cliente','codcliente','codigo_cliente','id_cliente','cliente','cd_clien','empresa','cdempresa'],
+ VK_EX=['valor_pedido','vl_pedido','vlr_pedido','valor_total','vl_total','vlr_total','total','valor','vl_liquido','valor_liquido'],
+ NK_EX=['pedido','nr_pedido','nu_pedido','num_pedido','numero_pedido','cd_pedido','id_pedido','nrpedido','numpedido'],
+ NM_EX=['nome_completo','nome_cliente','nm_cliente','razao_social','cliente_nome','nome'];
+function listOf(L){if(!Array.isArray(L)){const k=L&&typeof L==='object'?Object.keys(L).find(k=>Array.isArray(L[k])):null;L=k?L[k]:(L&&typeof L==='object'?[L]:[])}
+ return L.map(x=>x&&x.json&&typeof x.json==='object'?x.json:x).filter(x=>x&&typeof x==='object')}
+async function n8nGet(u,m,say){
+ const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),20*60*1000);
+ try{let resp;
+  try{resp=await fetch(u,{method:m,signal:ctl.signal,cache:'no-store'})}
+  catch(x){throw new Error(x.name==='AbortError'?'tempo esgotado (20 min) esperando o n8n.':'não consegui falar com o n8n. Confira se ele está rodando e a URL está certa. Na URL de teste (/webhook-test/), clique antes em “Execute workflow” no n8n: ela responde uma vez só. Confira também o CORS do nó Webhook.')}
+  if(!resp.ok)throw new Error('o n8n respondeu '+resp.status+' '+(resp.statusText||'')+'. Confira se o workflow está ativo (ou aguardando o teste) e se o método ('+m+') é o mesmo do nó Webhook.');
+  const txt=await resp.text();
+  try{return JSON.parse(txt)}catch(x){throw new Error('a resposta do n8n não é um JSON válido (primeiros caracteres: '+esc(txt.slice(0,80))+').')}
+ }finally{clearTimeout(to)}}
+const find2=t=>find(t)||(/^\d+$/.test(t)?find(strip(t)||'0'):null);
+const RISK=e=>e.sc>=70?['Adequado','var(--ok)']:e.sc>=50?['Acompanhar','var(--w)']:['Cautela','var(--bad)'];
+function showOrders(L,forced){
+ const say=t=>{$('#pdst').innerHTML=t},keys=[...new Set(L.slice(0,200).flatMap(o=>Object.keys(o)))];
+ let saved='';try{saved=localStorage.getItem('aval-ped-ck')||''}catch(x){}
+ const ck=(forced&&keys.includes(forced)?forced:null)||(keys.includes(saved)?saved:null)||pickKey(keys,CK_EX,['cliente','empresa']);
+ if(!ck){say('<span class="neg">Não identifiquei qual campo traz o código do cliente.</span> Campos recebidos: '+keys.map(esc).join(', ')+'.');
+  $('#pdmap').innerHTML='Escolha o campo do cliente: <select id="pdck">'+keys.map(k=>`<option>${esc(k)}</option>`).join('')+'</select> <button id="pdok">Usar este campo</button>';
+  $('#pdok').onclick=()=>showOrders(L,$('#pdck').value);return}
+ if(forced){try{localStorage.setItem('aval-ped-ck',forced)}catch(x){}}
+ $('#pdmap').innerHTML='';
+ const vk=pickKey(keys,VK_EX,[]),nk=pickKey(keys,NK_EX,['pedido']),mk=pickKey(keys,NM_EX,[]),G=new Map(),miss=new Map();let sem=0;
+ L.forEach(o=>{const t=o[ck]==null?'':String(o[ck]).trim();if(!t){sem++;return}
+  const c=find2(t),val=vk?num(o[vk]):0;
+  if(c){let g=G.get(c.c);if(!g)G.set(c.c,g={c,n:0,v:0});g.n++;g.v+=val}
+  else{let g=miss.get(t);if(!g)miss.set(t,g={t,nm:mk?String(o[mk]||'').trim():'',n:0,v:0});g.n++;g.v+=val}});
+ const rows=[...G.values()].map(g=>({...g,e:ev(g.c)})).sort((a,b)=>a.e.sc-b.e.sc),mis=[...miss.values()].sort((a,b)=>b.v-a.v||b.n-a.n);
+ const tv=rows.reduce((a,r)=>a+r.v,0)+mis.reduce((a,r)=>a+r.v,0),rv=rows.filter(r=>r.e.sc<50).reduce((a,r)=>a+r.v,0);
+ SEL=rows.map(r=>r.c.c);cur=SEL[0]||null;
+ say('<b>'+L.length.toLocaleString('pt-BR')+'</b> pedido(s) lidos. Campo do cliente: <b>'+esc(ck)+'</b>'+(vk?'; valor: <b>'+esc(vk)+'</b>':'; valor do pedido não identificado')+'. '+rows.length+' cliente(s) avaliado(s), '+mis.length+' sem histórico na base.'+(sem?' '+sem+' pedido(s) sem código de cliente.':'')+' <a href="#" id="pdch">Trocar campo do cliente</a>');
+ $('#pdch').onclick=ev_=>{ev_.preventDefault();try{localStorage.removeItem('aval-ped-ck')}catch(x){}$('#pdmap').innerHTML='Escolha o campo do cliente: <select id="pdck">'+keys.map(k=>`<option ${k===ck?'selected':''}>${esc(k)}</option>`).join('')+'</select> <button id="pdok">Usar este campo</button>';$('#pdok').onclick=()=>showOrders(L,$('#pdck').value)};
+ let h=`<div class="kpis" style="margin-top:14px"><div class="k"><span>Pedidos</span><strong>${L.length.toLocaleString('pt-BR')}</strong></div><div class="k"><span>Clientes avaliados</span><strong>${rows.length}</strong></div>${vk?`<div class="k"><span>Valor dos pedidos</span><strong>${brl(tv)}</strong></div><div class="k"><span>Em clientes de risco (nota abaixo de 50)</span><strong class="${rv?'neg':''}">${brl(rv)}</strong></div>`:''}<div class="k"><span>Sem histórico na base</span><strong>${mis.length}</strong></div></div>`;
+ const th=x=>`<th style="cursor:default" class="${x==='Cliente'?'l':''}">${x}</th>`;
+ h+=`<div class="card"><h2>Pedidos por cliente (do pior para o melhor, clique para detalhar)</h2><div class="tw"><table><thead><tr>${['Cliente','Pedidos'].concat(vk?['Valor']:[]).concat(['Nota','Classe','Vencido','Dias vencido','Parecer']).map(th).join('')}</tr></thead><tbody>`;
+ rows.forEach(r=>{const z=RISK(r.e);h+=`<tr data-c="${esc(r.c.c)}"><td class="l">${esc(r.c.n)}<div class="sub">${r.c.rede?'Rede de lojas · '+r.c.L.length+' clientes':esc(r.c.c)}</div></td><td>${r.n}</td>${vk?`<td>${brl(r.v)}</td>`:''}<td><b>${r.e.sc}</b></td><td>${tag(r.e)}</td><td class="${r.e.vv?'neg':''}">${brl(r.e.vv)}</td><td>${r.e.md||'—'}</td><td><b style="color:${z[1]}">${z[0]}</b></td></tr>`});
+ h+='</tbody></table></div><div class="sub" style="margin-top:6px">Parecer indicativo: Adequado (nota 70 ou mais), Acompanhar (50 a 69), Cautela (abaixo de 50).</div></div>';
+ if(mis.length)h+=`<div class="card"><h2>Clientes dos pedidos sem histórico na base (${mis.length})</h2><div class="tw"><table><thead><tr>${['Código'].concat(mk?['Nome']:[]).concat(['Pedidos']).concat(vk?['Valor']:[]).map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${mis.map(m=>`<tr><td class="l">${esc(m.t)}</td>${mk?`<td class="l">${esc(m.nm)}</td>`:''}<td>${m.n}</td>${vk?`<td>${brl(m.v)}</td>`:''}</tr>`).join('')}</tbody></table></div><div class="sub" style="margin-top:6px">Cliente novo ou com código diferente do financeiro: não há parcelas na base para avaliar a pontualidade.</div></div>`;
+ $('#ped').innerHTML=h;
+ $('#ped').querySelectorAll('tbody tr[data-c]').forEach(t=>t.onclick=()=>{cur=t.dataset.c;draw();document.getElementById('det').scrollIntoView({behavior:'smooth'})});
+ draw()}
+try{$('#pdu').value=localStorage.getItem('aval-ped-url')||'';$('#pdm').value=localStorage.getItem('aval-ped-m')||'GET'}catch(x){}
+$('#pdb').onclick=async()=>{
+ const u=$('#pdu').value.trim(),m=$('#pdm').value||'GET',b=$('#pdb'),say=t=>{$('#pdst').innerHTML=t};
+ if(!DATA.length){say('<span class="neg">Carregue antes a base financeira (Atualizar dados ou envio de arquivo).</span>');return}
+ if(!/^https?:\/\//i.test(u)){say('<span class="neg">Informe a URL do webhook do n8n (começa com http:// ou https://).</span>');return}
+ try{localStorage.setItem('aval-ped-url',u);localStorage.setItem('aval-ped-m',m)}catch(x){}
+ b.disabled=true;$('#pdmap').innerHTML='';say('Buscando pedidos no n8n…');
+ try{const L=listOf(await n8nGet(u,m,say));if(!L.length)throw new Error('o n8n não devolveu nenhum pedido.');showOrders(L)}
+ catch(x){say('<span class="neg">Não foi possível buscar os pedidos: '+x.message+'</span>')}
+ finally{b.disabled=false}};
+$('#rst').onclick=async()=>{try{await idbOp('readwrite',s=>s.delete('base'))}catch(x){}applyBase(ORIG,'Nenhuma base carregada');st('Base removida deste navegador.')};
+(async()=>{try{const s=await idbOp('readonly',s=>s.get('base'));if(s&&s.arr){applyBase(s.arr,s.label);st('Base carregada deste navegador: '+s.label)}}catch(x){}})();
+</script></body></html>
