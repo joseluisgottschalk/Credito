@@ -352,13 +352,15 @@ function showOrders(L,forced){
  if(mis.length)$('#ecb').onclick=ecoRun;
  $('#ped').querySelectorAll('tbody tr[data-c]').forEach(t=>t.onclick=()=>{cur=t.dataset.c;draw();document.getElementById('det').scrollIntoView({behavior:'smooth'})});
  draw()}
-try{$('#pdu').value=localStorage.getItem('aval-ped-url')||'';$('#pdm').value=localStorage.getItem('aval-ped-m')||'GET'}catch(x){}
+const PED_URL='http://localhost:5678/webhook/857f70d1-5118-4a66-9945-5e4b7b080aaa';
+$('#pdu').value=PED_URL;
+try{$('#pdu').value=localStorage.getItem('aval-ped-url2')||PED_URL;$('#pdm').value=localStorage.getItem('aval-ped-m')||'GET'}catch(x){}
 try{$('#ecu').value=localStorage.getItem('aval-eco-url')||''}catch(x){}
 $('#pdb').onclick=async()=>{
  const u=$('#pdu').value.trim(),m=$('#pdm').value||'GET',b=$('#pdb'),say=t=>{$('#pdst').innerHTML=t};
  if(!DATA.length){say('<span class="neg">Carregue antes a base financeira (Atualizar dados ou envio de arquivo).</span>');return}
  if(!/^https?:\/\//i.test(u)){say('<span class="neg">Informe a URL do webhook do n8n (começa com http:// ou https://).</span>');return}
- try{localStorage.setItem('aval-ped-url',u);localStorage.setItem('aval-ped-m',m)}catch(x){}
+ try{localStorage.setItem('aval-ped-url2',u);localStorage.setItem('aval-ped-m',m)}catch(x){}
  b.disabled=true;$('#pdmap').innerHTML='';say('Buscando pedidos no n8n…');
  try{const L=listOf(await n8nGet(u,m,say));if(!L.length)throw new Error('o n8n não devolveu nenhum pedido.');showOrders(L);if(LASTMIS.length)await ecoRun();return true}
  catch(x){say('<span class="neg">Não foi possível buscar os pedidos: '+x.message+'</span>');return false}
