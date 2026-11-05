@@ -41,6 +41,12 @@ ul.p{margin:6px 0 0;padding-left:18px}
 details{margin-top:12px;color:var(--mut);font-size:12.5px}
 svg text{fill:var(--mut);font-size:10px}
 .emp{color:var(--mut);padding:14px 0}
+.dec{padding:4px 9px;font-size:12px;border-radius:6px;margin-left:4px}
+.dec.on-a{background:var(--ok);border-color:var(--ok);color:#fff}
+.dec.on-r{background:var(--bad);border-color:var(--bad);color:#fff}
+.flt{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.flt button.on{background:var(--ac);border-color:var(--ac);color:#fff}
+td.obs{white-space:normal;min-width:140px;max-width:240px;text-align:left}
 </style><script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script></head><body><div class="wrap">
 <h1>Avaliação de clientes por pontualidade</h1>
 <div class="sub" id="ref"></div>
@@ -59,8 +65,9 @@ svg text{fill:var(--mut);font-size:10px}
 
 <div class="card"><h2>Base de dados</h2><div class="row" style="align-items:center"><button id="upd">Atualizar só a base</button><input type="file" id="upl" accept=".xlsx,.xls,.xlsm,.csv,.json,.txt" style="max-width:340px"><button id="rst">Limpar base salva</button></div><div id="st" class="sub" style="margin-top:8px"></div><div class="sub">Busque a base no n8n ou envie uma planilha ou o JSON do n8n. Colunas: Cd_empresa, Nome_completo, Nf, Complemento, Valor, Saldo, Dt_vencimento, Dt_ultima_liqui; opcional: Cd_centralizado, que reúne os clientes em rede de lojas. Os dados são lidos no seu navegador, sem passar por terceiros; a base nova fica salva neste navegador.</div></div>
 <div class="card"><h2>Pedidos</h2><div class="row" style="align-items:center"><button id="pdb">Buscar pedidos e avaliar</button></div>
-<div id="pdst" class="sub" style="margin-top:8px"></div><div id="pdmap" style="margin-top:6px"></div>
-<div class="sub">Busca os pedidos no n8n, identifica o cliente de cada pedido e avalia só esses clientes (redes de lojas incluídas). Requer a base financeira carregada.</div></div>
+<div id="pdst" class="sub" style="margin-top:8px"></div>
+<details id="pmap"><summary>Campos do pedido (conferir o que foi reconhecido)</summary><div id="pmapg"></div></details>
+<div class="sub">Busca os pedidos no n8n, avalia o cliente de cada pedido (redes de lojas incluídas) e permite aprovar ou reprovar cada pedido e exportar os aprovados em PDF. Requer a base financeira carregada.</div></div>
 <div id="ped"></div>
 <div class="card"><h2>1. Escolha os clientes</h2>
 <div class="row">
@@ -98,6 +105,8 @@ function ev(c){
  return c._e={sc,cls,n,pok:n?ok/n:null,am:n?c.sp/n:null,mx:c.mx,vv,nv:ven.length,va,na:av.length,md,ven,av,tot:vv+va,fraco:n<3};
 }
 let SEL=[],cur=null,sortK='sc',sortD=1;
+let ORDS=[],DEC={},FILT='todos',PM={},PK=[];
+try{DEC=JSON.parse(localStorage.getItem('aval-ped-dec')||'{}')||{}}catch(x){DEC={}}
 function add(c){if(c&&!SEL.includes(c.c)){SEL.push(c.c);cur=cur||c.c}}
 function find(t){t=t.trim();if(!t)return null;if(byCode[t])return byCode[t];const z=t.padStart(6,'0');if(/^\d+$/.test(t)&&byCode[z])return byCode[z];const n=norm(t);return DATA.find(c=>norm(c.n)===n)||DATA.find(c=>c.rede&&c.L.some(x=>norm(x.n)===n))||null}
 const q=$('#q'),dd=$('#dd');
@@ -141,6 +150,7 @@ function detail(c){
  if(e.nv)pts.push(`Há ${e.nv} parcela(s) vencida(s) em aberto, somando ${brl(e.vv)}, a mais antiga com ${e.md} dias de atraso.`);else pts.push('Nenhuma parcela vencida em aberto.');
  if(e.na)pts.push(`${e.na} parcela(s) a vencer, somando ${brl(e.va)}.`);
  const lim=e.sc>=70?'Perfil adequado para manter ou ampliar condições.':e.sc>=50?'Recomenda-se acompanhamento e atenção ao limite de crédito.':'Recomenda-se cautela: avaliar restrição de crédito ou venda com garantia.';
+ const OD=detOrders(c,e);
  const m=c.m.slice().sort((a,b)=>a[0]-b[0]),ml=m.map(x=>MN[x[0]%12]+'/'+String(Math.floor(x[0]/12)).slice(2));
  const tb=(h,rs)=>`<div class="tw"><table><thead><tr>${h.map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${rs}</tbody></table></div>`;
  const nm={};if(c.rede)c.L.forEach(x=>nm[x.c]=x.n);const lc=code=>c.rede?`<td class="l">${nm[code]||code}</td>`:'',lh=c.rede?['Loja']:[];
@@ -148,7 +158,7 @@ function detail(c){
  const op=e.ven.concat(e.av).map(p=>{const d=TODAY-p[2];return `<tr>${lc(p[6])}<td>${p[0]}${p[1]?'/'+p[1]:''}</td><td>${fd(p[2])}</td><td>${brl(p[3])}</td><td>${brl(p[4])}</td><td>${p[5]?fd(p[5]):'—'}</td><td class="${d>0?'neg':''}">${d>0?d+' d vencida':'a vencer'}</td></tr>`}).join('');
  const rc=c.r.map(p=>{const l=p[4]-p[2];return `<tr>${lc(p[5])}<td>${p[0]}${p[1]?'/'+p[1]:''}</td><td>${fd(p[2])}</td><td>${fd(p[4])}</td><td>${brl(p[3])}</td><td class="${l>3?'neg':'pos'}">${l>0?'+'+l:l} d</td></tr>`}).join('');
  P.innerHTML=`<div class="card"><h2>3. Análise do cliente</h2><div class="row"><div style="flex:1 1 260px"><div style="font-weight:600">${c.n}</div><div class="sub">${c.rede?'Rede de lojas · '+c.L.length+' clientes · centralizado '+c.g:'Código '+c.c}</div><div style="margin:10px 0"><span class="big" style="color:${e.cls[3]}">${e.sc}</span><span class="sub"> / 100</span> &nbsp;${tag(e)}</div></div>
- <div style="flex:2 1 320px"><ul class="p">${pts.map(x=>`<li>${x}</li>`).join('')}</ul><p style="margin:8px 0 0"><b>${lim}</b></p></div></div></div>${lojas}
+ <div style="flex:2 1 320px"><ul class="p">${pts.map(x=>`<li>${x}</li>`).join('')}</ul><p style="margin:8px 0 0"><b>${lim}</b></p></div></div>${OD.kp}</div>${OD.card}${lojas}
  <div class="grid"><div class="card"><h2>Dias de atraso nas parcelas liquidadas</h2>${bars(c.b,bl,bc,'')}<div class="sub">Quantidade de parcelas por faixa de dias após o vencimento.</div></div>
  <div class="card"><h2>Atraso médio por mês de vencimento</h2>${m.length?bars(m.map(x=>x[3]/x[1]),ml,'var(--ac)',''):'<div class="emp">Sem liquidações nos últimos 24 meses.</div>'}<div class="sub">Dias de atraso médio das parcelas liquidadas (0 = em dia).</div></div></div>
  <div class="card"><h2>Parcelas em aberto (saldo maior que zero)</h2>${e.nv+e.na?tb(lh.concat(['NF/parcela','Vencimento','Valor','Saldo','Última liquidação','Situação']),op):'<div class="emp">Cliente sem parcelas em aberto.</div>'}</div>
@@ -256,7 +266,7 @@ $('#upd').onclick=async()=>{
 
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const NK_=k=>norm(String(k)).replace(/[^a-z0-9_]/g,'');
-function pickKey(keys,exact,part){const m=keys.map(k=>[k,NK_(k)]);for(const c of exact){const f=m.find(x=>x[1]===c);if(f)return f[0]}for(const p of(part||[])){const f=m.find(x=>x[1].includes(p)&&!x[1].includes('nome'));if(f)return f[0]}return null}
+function pickKey(keys,exact,part){const u=s=>s.replace(/_/g,''),m=keys.map(k=>{const n=NK_(k);return[k,n,u(n)]});for(const c of exact){const f=m.find(x=>x[2]===u(c));if(f)return f[0]}for(const p of(part||[])){const f=m.find(x=>x[1].includes(p)&&!x[1].includes('nome'));if(f)return f[0]}return null}
 const CK_EX=['cd_empresa','cd_cliente','cdcliente','cod_cliente','codcliente','codigo_cliente','id_cliente','cliente','cd_clien','empresa','cdempresa'],
  VK_EX=['valor_pedido','vl_pedido','vlr_pedido','valor_total','vl_total','vlr_total','total','valor','vl_liquido','valor_liquido'],
  NK_EX=['pedido','nr_pedido','nu_pedido','num_pedido','numero_pedido','cd_pedido','id_pedido','nrpedido','numpedido'],
@@ -277,7 +287,7 @@ const RISK=e=>e.sc>=70?['Adequado','var(--ok)']:e.sc>=50?['Acompanhar','var(--w)
 const CNPJ_EX=['cnpj','nr_cnpj','nu_cnpj','cd_cnpj','cnpj_cpf','cpf_cnpj','cgc','nr_cgc','cnpjcpf'],
  FD_EX=['data_fundacao','datafundacao','dt_fundacao','data_de_fundacao','data_abertura','dataabertura','dt_abertura','data_inicio_atividade','dt_inicio_atividade','data_inicio','fundacao','abertura'],
  SIT_EX=['situacao_cadastral','situacao','situacao_cnpj','status'];
-const ECO={};let LASTL=null,LASTCK=null,LASTMIS=[];
+const ECO={};let LASTL=null,LASTMIS=[];
 const anos=d=>(TODAY-d)/365.25;
 const ECK='aval-eco-cache';
 try{const c=JSON.parse(localStorage.getItem(ECK)||'{}');for(const k in c)ECO[k]={d:c[k].d,sit:c[k].sit||''}}catch(x){}
@@ -321,33 +331,75 @@ async function ecoRun(){
     ecoMerge(part,listOf(await n8nGet(u,'POST',say,{clientes:part.map(m=>({codigo:m.t,cnpj:m.cnpj,nome:m.nm}))})))}}
   else await receitaRun(todo,say)}
  catch(x){falha=x.message}
- ecoSave();showOrders(LASTL,LASTCK);
+ ecoSave();showOrders(LASTL);
  say(sum()+(falha?'<span class="neg">Não foi possível concluir: '+falha+'</span>':''));
  const nb=$('#ecb');if(nb)nb.disabled=false;return !falha}
-function showOrders(L,forced){
+// ===== Pedidos: campos, avaliação, aprovação e PDF =====
+const PF=[
+ ['cli','Código do cliente',CK_EX,['cliente','empresa']],
+ ['nome','Nome do cliente',NM_EX,[]],
+ ['ped','Pedido',NK_EX.concat(['nped']),['pedido']],
+ ['data','Data do pedido',['data_pedido','dt_pedido','data','dt_emissao','data_emissao','emissao','dt_digitacao','data_digitacao','datapedido'],['data','emissao']],
+ ['cnpj','CNPJ',CNPJ_EX,['cnpj','cgc']],
+ ['rep','Representante (fantasia)',['fantasia','representante_fantasia','fantasia_representante','fantasia_rep','fantasia_repres','nm_fantasia_representante','nome_fantasia_representante','representante','nome_representante','nm_representante','rep'],['repres','vendedor']],
+ ['reg','Regional',['regional','nome_regional','nm_regional','regiao','cd_regional'],['regional','regiao']],
+ ['val','Valor do pedido',VK_EX,[]],
+ ['cond','Condição de pagamento',['condicao_pagamento','condicao_de_pagamento','cond_pagamento','cond_de_pagamento','cond_pgto','condicao_pgto','condpgto','cond_pagto','cond_pag','condicao','prazo_pagamento','prazo','forma_pagamento'],['cond','prazo','pgto']],
+ ['obs','Observação',['observacao','observacoes','obs','obs_pedido','observacao_pedido','ds_observacao','historico'],['observ','obs']]];
+function mapFor(keys){let sv={};try{sv=JSON.parse(localStorage.getItem('aval-ped-map')||'{}')||{}}catch(x){}
+ const m={};PF.forEach(([f,,ex,pt])=>{m[f]=(f in sv&&(sv[f]===''||keys.includes(sv[f])))?(sv[f]||null):pickKey(keys,ex,pt)});return m}
+function renderMap(){
+ $('#pmapg').innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:10px">'+PF.map(([f,lab])=>`<label style="display:block"><span class="sub">${lab}${PM[f]?'':' <b class="neg">· não identificado</b>'}</span><select data-f="${f}" style="width:100%"><option value="">(nenhum)</option>${PK.map(k=>`<option ${PM[f]===k?'selected':''}>${esc(k)}</option>`).join('')}</select></label>`).join('')+'</div>'}
+const fmtCnpj=d=>d&&d.length===14?`${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`:(d||'');
+const cmpPed=(a,b)=>String(a.ped).localeCompare(String(b.ped),'pt-BR',{numeric:true});
+function cliName(o){if(o.nome)return o.nome;const c=o.ent?byCode[o.ent]:null;if(c){if(c.rede){const s=c.L.find(x=>strip(x.c)===strip(o.cod));return s?s.n:c.n}return c.n}return o.cod}
+const dtStr=o=>o.dt!=null?fd(o.dt):(o.dts||'');
+function decBtns(o){const s=DEC[o.id],i=esc(o.id);return `<button class="dec ${s==='A'?'on-a':''}" data-d="A" data-o="${i}">Aprovar</button><button class="dec ${s==='R'?'on-r':''}" data-d="R" data-o="${i}">Reprovar</button>`}
+function decSave(){try{localStorage.setItem('aval-ped-dec',JSON.stringify(DEC))}catch(x){}}
+function setDec(id,s){if(DEC[id]===s)delete DEC[id];else DEC[id]=s;decSave();renderPed();if(cur&&byCode[cur]&&$('#det'))detail(byCode[cur])}
+function detOrders(c,e){
+ const po=ORDS.filter(o=>o.ent===c.c);if(!po.length)return{kp:'',card:''};
+ const vp=po.reduce((a,o)=>a+o.val,0),cs=[...new Set(po.map(o=>o.cond).filter(Boolean))],n=po.length;
+ const kp=`<div class="kpis" style="margin-top:12px"><div class="k"><span>Valor do pedido${n>1?' ('+n+' pedidos)':''}</span><strong>${PM.val?brl(vp):'—'}</strong></div><div class="k"><span>Condição de pagamento</span><strong>${cs.length?esc(cs.join(' · ')):'—'}</strong></div>${PM.val?`<div class="k"><span>Em aberto + pedido</span><strong>${brl(e.tot+vp)}</strong></div>`:''}</div>`;
+ const rede=c.rede,th=['Pedido','Data'].concat(rede?['Loja']:[]).concat(['Valor','Condição de pagamento','Observação','Decisão']);
+ const card=`<div class="card"><h2>Pedidos deste cliente</h2><div class="tw"><table><thead><tr>${th.map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${po.map(o=>`<tr><td class="l"><b>${esc(o.ped||'—')}</b></td><td>${esc(dtStr(o))||'—'}</td>${rede?`<td class="l">${esc(cliName(o))}</td>`:''}<td>${PM.val?brl(o.val):'—'}</td><td>${esc(o.cond)||'—'}</td><td class="obs">${esc(o.obs)}</td><td style="white-space:nowrap">${decBtns(o)}</td></tr>`).join('')}</tbody></table></div></div>`;
+ return{kp,card}}
+function renderPed(){
+ const box=$('#pedo');if(!box)return;
+ const cnt={A:0,R:0,P:0};ORDS.forEach(o=>cnt[DEC[o.id]||'P']++);
+ const vis=ORDS.filter(o=>FILT==='todos'||(FILT==='P'?!DEC[o.id]:DEC[o.id]===FILT));
+ const fb=(k,l,n)=>`<button data-f="${k}" class="${FILT===k?'on':''}">${l} (${n})</button>`;
+ let h=`<div class="card"><h2>Pedidos para liberação</h2><div class="flt">${fb('todos','Todos',ORDS.length)}${fb('P','Pendentes',cnt.P)}${fb('A','Aprovados',cnt.A)}${fb('R','Reprovados',cnt.R)}<span style="flex:1"></span><button class="p" id="pdf" ${cnt.A?'':'disabled'}>Exportar aprovados (PDF)</button><button id="decclr" ${cnt.A+cnt.R?'':'disabled'}>Limpar decisões</button></div>`;
+ h+=`<div class="tw"><table><thead><tr>${['Pedido','Data','Cliente','Valor','Condição de pagamento','Nota','Classe','Vencido','Parecer','Observação','Decisão'].map((x,i)=>`<th style="cursor:default" class="${i==2||i==0?'l':''}">${x}</th>`).join('')}</tr></thead><tbody>`;
+ vis.forEach(o=>{const ent=o.ent?byCode[o.ent]:null,e=ent?ev(ent):null,z=e?RISK(e):null;
+  let sub=ent?(ent.rede?'Rede de lojas · loja '+o.cod:o.cod):o.cod;
+  if(!ent){const x=ECO[o.cod];if(x&&x.d!=null){const an=anos(x.d);sub+=' · fundada em '+fd(x.d)+' ('+an.toLocaleString('pt-BR',{maximumFractionDigits:1})+' anos'+(an<2?', recente':'')+')'}}
+  h+=`<tr${ent?` data-c="${esc(ent.c)}"`:''}><td class="l"><b>${esc(o.ped||'—')}</b></td><td>${esc(dtStr(o))||'—'}</td><td class="l">${esc(cliName(o))}<div class="sub">${esc(sub)}</div></td><td>${PM.val?brl(o.val):'—'}</td><td>${esc(o.cond)||'—'}</td><td>${e?`<b>${e.sc}</b>`:'—'}</td><td>${e?tag(e):'<span class="tag" style="background:var(--mut)">Sem histórico</span>'}</td><td class="${e&&e.vv?'neg':''}">${e?brl(e.vv):'—'}</td><td>${z?`<b style="color:${z[1]}">${z[0]}</b>`:'—'}</td><td class="obs">${esc(o.obs)}</td><td style="white-space:nowrap">${decBtns(o)}</td></tr>`});
+ if(!vis.length)h+=`<tr><td colspan="11" class="emp" style="text-align:center">Nenhum pedido neste filtro.</td></tr>`;
+ h+='</tbody></table></div><div class="sub" style="margin-top:6px">Clique na linha para ver a análise completa do cliente. Parecer indicativo: Adequado (nota 70 ou mais), Acompanhar (50 a 69), Cautela (abaixo de 50). As decisões ficam salvas neste navegador.</div></div>';
+ box.innerHTML=h}
+function showOrders(L){
  const say=t=>{$('#pdst').innerHTML=t},keys=[...new Set(L.slice(0,200).flatMap(o=>Object.keys(o)))];
- let saved='';try{saved=localStorage.getItem('aval-ped-ck')||''}catch(x){}
- const ck=(forced&&keys.includes(forced)?forced:null)||(keys.includes(saved)?saved:null)||pickKey(keys,CK_EX,['cliente','empresa']);
- if(!ck){say('<span class="neg">Não identifiquei qual campo traz o código do cliente.</span> Campos recebidos: '+keys.map(esc).join(', ')+'.');
-  $('#pdmap').innerHTML='Escolha o campo do cliente: <select id="pdck">'+keys.map(k=>`<option>${esc(k)}</option>`).join('')+'</select> <button id="pdok">Usar este campo</button>';
-  $('#pdok').onclick=()=>showOrders(L,$('#pdck').value);return}
- if(forced){try{localStorage.setItem('aval-ped-ck',forced)}catch(x){}}
- $('#pdmap').innerHTML='';
- const vk=pickKey(keys,VK_EX,[]),nk=pickKey(keys,NK_EX,['pedido']),mk=pickKey(keys,NM_EX,[]),ek=pickKey(keys,CNPJ_EX,['cnpj','cgc']),G=new Map(),miss=new Map();let sem=0;
- L.forEach(o=>{const t=o[ck]==null?'':String(o[ck]).trim();if(!t){sem++;return}
-  const c=find2(t),val=vk?num(o[vk]):0;
-  if(c){let g=G.get(c.c);if(!g)G.set(c.c,g={c,n:0,v:0});g.n++;g.v+=val}
-  else{let g=miss.get(t);if(!g)miss.set(t,g={t,nm:mk?String(o[mk]||'').trim():'',cnpj:'',n:0,v:0});if(ek&&!g.cnpj)g.cnpj=String(o[ek]==null?'':o[ek]).replace(/\D/g,'');g.n++;g.v+=val}});
- const rows=[...G.values()].map(g=>({...g,e:ev(g.c)})).sort((a,b)=>a.e.sc-b.e.sc),mis=[...miss.values()].sort((a,b)=>b.v-a.v||b.n-a.n);
- const tv=rows.reduce((a,r)=>a+r.v,0)+mis.reduce((a,r)=>a+r.v,0),rv=rows.filter(r=>r.e.sc<50).reduce((a,r)=>a+r.v,0);
- LASTL=L;LASTCK=ck;LASTMIS=mis;SEL=rows.map(r=>r.c.c);cur=SEL[0]||null;
- say('<b>'+L.length.toLocaleString('pt-BR')+'</b> pedido(s) lidos. Campo do cliente: <b>'+esc(ck)+'</b>'+(vk?'; valor: <b>'+esc(vk)+'</b>':'; valor do pedido não identificado')+'. '+rows.length+' cliente(s) avaliado(s), '+mis.length+' sem histórico na base.'+(sem?' '+sem+' pedido(s) sem código de cliente.':'')+' <a href="#" id="pdch">Trocar campo do cliente</a>');
- $('#pdch').onclick=ev_=>{ev_.preventDefault();try{localStorage.removeItem('aval-ped-ck')}catch(x){}$('#pdmap').innerHTML='Escolha o campo do cliente: <select id="pdck">'+keys.map(k=>`<option ${k===ck?'selected':''}>${esc(k)}</option>`).join('')+'</select> <button id="pdok">Usar este campo</button>';$('#pdok').onclick=()=>showOrders(L,$('#pdck').value)};
- let h=`<div class="kpis" style="margin-top:14px"><div class="k"><span>Pedidos</span><strong>${L.length.toLocaleString('pt-BR')}</strong></div><div class="k"><span>Clientes avaliados</span><strong>${rows.length}</strong></div>${vk?`<div class="k"><span>Valor dos pedidos</span><strong>${brl(tv)}</strong></div><div class="k"><span>Em clientes de risco (nota abaixo de 50)</span><strong class="${rv?'neg':''}">${brl(rv)}</strong></div>`:''}<div class="k"><span>Sem histórico na base</span><strong>${mis.length}</strong></div></div>`;
- const th=x=>`<th style="cursor:default" class="${x==='Cliente'?'l':''}">${x}</th>`;
- h+=`<div class="card"><h2>Pedidos por cliente (do pior para o melhor, clique para detalhar)</h2><div class="tw"><table><thead><tr>${['Cliente','Pedidos'].concat(vk?['Valor']:[]).concat(['Nota','Classe','Vencido','Dias vencido','Parecer']).map(th).join('')}</tr></thead><tbody>`;
- rows.forEach(r=>{const z=RISK(r.e);h+=`<tr data-c="${esc(r.c.c)}"><td class="l">${esc(r.c.n)}<div class="sub">${r.c.rede?'Rede de lojas · '+r.c.L.length+' clientes':esc(r.c.c)}</div></td><td>${r.n}</td>${vk?`<td>${brl(r.v)}</td>`:''}<td><b>${r.e.sc}</b></td><td>${tag(r.e)}</td><td class="${r.e.vv?'neg':''}">${brl(r.e.vv)}</td><td>${r.e.md||'—'}</td><td><b style="color:${z[1]}">${z[0]}</b></td></tr>`});
- h+='</tbody></table></div><div class="sub" style="margin-top:6px">Parecer indicativo: Adequado (nota 70 ou mais), Acompanhar (50 a 69), Cautela (abaixo de 50).</div></div>';
+ LASTL=L;PK=keys;PM=mapFor(keys);renderMap();
+ if(!PM.cli){say('<span class="neg">Não identifiquei qual campo traz o código do cliente.</span> Escolha o campo em “Campos do pedido”. Campos recebidos: '+keys.map(esc).join(', ')+'.');$('#pmap').open=true;$('#ped').innerHTML='';ORDS=[];LASTMIS=[];return}
+ const g=(o,f)=>PM[f]?o[PM[f]]:null,tx=(o,f)=>{const v=g(o,f);return v==null?'':String(v).trim()};
+ const seen=new Set(),G=new Map(),miss=new Map();let sem=0,dup=0;ORDS=[];
+ L.forEach((o,i)=>{const cod=tx(o,'cli');if(!cod){sem++;return}
+  const ped=tx(o,'ped');if(ped){if(seen.has(ped)){dup++;return}seen.add(ped)}
+  const c=find2(cod),r={id:ped?'P'+ped:'#'+i,ped,dt:toDay(g(o,'data')),dts:tx(o,'data'),cod,nome:tx(o,'nome'),cnpj:tx(o,'cnpj').replace(/\D/g,''),rep:tx(o,'rep'),reg:tx(o,'reg'),val:PM.val?num(g(o,'val')):0,obs:tx(o,'obs'),cond:tx(o,'cond'),ent:c?c.c:null};
+  ORDS.push(r);
+  if(c){let q=G.get(c.c);if(!q)G.set(c.c,q={c,n:0,v:0});q.n++;q.v+=r.val}
+  else{let q=miss.get(cod);if(!q)miss.set(cod,q={t:cod,nm:r.nome,cnpj:'',n:0,v:0});if(!q.cnpj)q.cnpj=r.cnpj;q.n++;q.v+=r.val}});
+ const sk=o=>o.ent?ev(byCode[o.ent]).sc:-1;
+ ORDS.sort((a,b)=>sk(a)-sk(b)||cmpPed(a,b));
+ const vk=PM.val,mk=PM.nome;
+ const rows=[...G.values()].map(q=>({...q,e:ev(q.c)})).sort((a,b)=>a.e.sc-b.e.sc),mis=[...miss.values()].sort((a,b)=>b.v-a.v||b.n-a.n);
+ const tv=ORDS.reduce((a,o)=>a+o.val,0),rv=rows.filter(r=>r.e.sc<50).reduce((a,r)=>a+r.v,0);
+ LASTMIS=mis;const prev=cur;SEL=rows.map(r=>r.c.c);cur=SEL.includes(prev)?prev:(SEL[0]||null);
+ const campo=(f,l)=>l+': '+(PM[f]?'<b>'+esc(PM[f])+'</b>':'<span class="neg">não identificado</span>');
+ say('<b>'+ORDS.length.toLocaleString('pt-BR')+'</b> pedido(s) lidos. '+[['cli','cliente'],['ped','pedido'],['val','valor'],['cond','condição de pagamento']].map(([f,l])=>campo(f,l)).join('; ')+'. '+rows.length+' cliente(s) avaliado(s), '+mis.length+' sem histórico na base.'+(sem?' '+sem+' pedido(s) sem código de cliente (ignorados).':'')+(dup?' '+dup+' linha(s) repetida(s) do mesmo pedido (usei a primeira).':''));
+ let h=`<div class="kpis" style="margin-top:14px"><div class="k"><span>Pedidos</span><strong>${ORDS.length.toLocaleString('pt-BR')}</strong></div><div class="k"><span>Clientes avaliados</span><strong>${rows.length}</strong></div>${vk?`<div class="k"><span>Valor dos pedidos</span><strong>${brl(tv)}</strong></div><div class="k"><span>Em clientes de risco (nota abaixo de 50)</span><strong class="${rv?'neg':''}">${brl(rv)}</strong></div>`:''}<div class="k"><span>Sem histórico na base</span><strong>${mis.length}</strong></div></div><div id="pedo"></div>`;
+
  if(mis.length){const hc=mis.some(m=>m.cnpj),he=mis.some(m=>ECO[m.t]),hs=mis.some(m=>ECO[m.t]&&ECO[m.t].sit);
   const cols=['Código'].concat(mk?['Nome']:[]).concat(hc?['CNPJ']:[]).concat(['Pedidos']).concat(vk?['Valor']:[]).concat(he?['Fundação','Tempo de atividade']:[]).concat(hs?['Situação']:[]);
   h+=`<div class="card"><h2>Clientes dos pedidos sem histórico na base (${mis.length})</h2><div class="row" style="align-items:center;margin-bottom:8px"><button class="p" id="ecb">Buscar data de fundação</button><span class="sub" id="ecs"></span></div><div class="tw"><table><thead><tr>${cols.map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${mis.map(m=>{const x=ECO[m.t];let ec='';
@@ -355,8 +407,64 @@ function showOrders(L,forced){
    return `<tr><td class="l">${esc(m.t)}</td>${mk?`<td class="l">${esc(m.nm)}</td>`:''}${hc?`<td>${esc(m.cnpj)}</td>`:''}<td>${m.n}</td>${vk?`<td>${brl(m.v)}</td>`:''}${ec}${hs?`<td>${esc(x&&x.sit||'')}</td>`:''}</tr>`}).join('')}</tbody></table></div><div class="sub" style="margin-top:6px">Cliente novo ou com código diferente do financeiro: não há parcelas na base para avaliar a pontualidade. Empresa recente: menos de 2 anos de atividade.</div></div>`}
  $('#ped').innerHTML=h;
  if(mis.length)$('#ecb').onclick=ecoRun;
- $('#ped').querySelectorAll('tbody tr[data-c]').forEach(t=>t.onclick=()=>{cur=t.dataset.c;draw();document.getElementById('det').scrollIntoView({behavior:'smooth'})});
- draw()}
+ renderPed();draw()}
+function pedClick(e){
+ const t=e.target;if(!t||!t.closest)return;
+ const b=t.closest('button[data-d]');if(b){setDec(b.dataset.o,b.dataset.d);return}
+ const f=t.closest('[data-f]');if(f&&t.closest('#ped')){FILT=f.dataset.f;renderPed();return}
+ if(t.closest('#pdf')){exportPdf();return}
+ if(t.closest('#decclr')){if(confirm('Limpar todas as decisões (aprovado/reprovado) salvas neste navegador?')){DEC={};decSave();renderPed();if(cur&&byCode[cur]&&$('#det'))detail(byCode[cur])}return}
+ const tr=t.closest('tr[data-c]');if(tr&&t.closest('#ped')){cur=tr.dataset.c;draw();const d=document.getElementById('det');if(d)d.scrollIntoView({behavior:'smooth'})}}
+$('#ped').onclick=pedClick;$('#res').onclick=pedClick;
+$('#pmapg').onchange=e=>{const s=e.target.closest&&e.target.closest('select[data-f]');if(!s)return;let sv={};try{sv=JSON.parse(localStorage.getItem('aval-ped-map')||'{}')||{}}catch(x){}
+ sv[s.dataset.f]=s.value;try{localStorage.setItem('aval-ped-map',JSON.stringify(sv))}catch(x){}if(LASTL)showOrders(LASTL)};
+
+// ===== PDF (escritor próprio, sem bibliotecas: funciona offline) =====
+const HW={' ':278,' ':278,'!':278,'"':355,'#':556,'$':556,'%':889,'&':667,"'":191,'(':333,')':333,'*':389,'+':584,',':278,'-':333,'.':278,'/':278,':':278,';':278,'<':584,'=':584,'>':584,'?':556,'@':1015,'[':278,'\\':278,']':278,'^':469,'_':556,'`':333,'{':334,'|':260,'}':334,'~':584,'º':365,'ª':370,'·':278,'–':556,'—':1000,'•':350,'€':556,'°':400},
+ HU='667 667 722 722 667 611 778 722 278 500 667 556 833 722 778 667 778 722 667 611 722 667 944 667 667 611'.split(' ').map(Number),
+ HL='556 556 500 556 556 278 556 556 222 222 500 222 833 556 556 556 556 333 500 278 556 500 722 500 500 500'.split(' ').map(Number),
+ WIN={'€':128,'‚':130,'„':132,'…':133,'•':149,'–':150,'—':151,'‘':145,'’':146,'“':147,'”':148,'™':153};
+function pw(s,sz,bold){let w=0;for(const ch of s){let u;if(HW[ch]!=null)u=HW[ch];else if(ch>='0'&&ch<='9')u=556;else{const b=ch.normalize('NFD')[0];u=b>='A'&&b<='Z'?HU[b.charCodeAt(0)-65]:b>='a'&&b<='z'?HL[b.charCodeAt(0)-97]:556}w+=u}return w*sz/1000*(bold?1.07:1)}
+function penc(s){let o='';for(const ch of s){let c=ch.charCodeAt(0);if(WIN[ch]!=null)c=WIN[ch];else if(c>255)c=63;else if(c<32)c=32;const q=String.fromCharCode(c);o+=(q==='\\'||q==='('||q===')')?'\\'+q:q}return o}
+function pwrap(text,w,sz,bold){const words=String(text==null?'':text).replace(/\s+/g,' ').trim().split(' ').filter(Boolean),lines=[];let cur='';
+ for(let wd of words){
+  while(pw(wd,sz,bold)>w&&wd.length>1){let i=1;while(i<wd.length-1&&pw(wd.slice(0,i+1),sz,bold)<=w)i++;if(cur){lines.push(cur);cur=''}lines.push(wd.slice(0,i));wd=wd.slice(i)}
+  const t=cur?cur+' '+wd:wd;if(pw(t,sz,bold)<=w)cur=t;else{if(cur)lines.push(cur);cur=wd}}
+ if(cur)lines.push(cur);return lines.length?lines:['']}
+// o: {title,sub,head,rows,widths(pt),align('l'|'c'|'r'),hl(índices de colunas destacadas),minH}
+function buildPdf(o){
+ const PW=841.89,PH=595.28,M=28.35,fs=8,lh=9.8,pad=3,pages=[];let ops,y;const f=n=>n.toFixed(2);
+ const xs=[];let xx=M;o.widths.forEach(w=>{xs.push(xx);xx+=w});
+ const T=(s,x,yy,sz,bold,gray)=>`${gray?'0.35 g':'0 g'} BT /F${bold?2:1} ${sz} Tf ${f(x)} ${f(yy)} Td (${penc(s)}) Tj ET`;
+ const align=(s,i,sz,bold)=>{const a=o.align[i]||'l',w=pw(s,sz,bold),cw=o.widths[i];return a==='r'?xs[i]+cw-pad-w:a==='c'?xs[i]+(cw-w)/2:xs[i]+pad};
+ const headRow=()=>{const L=o.head.map((t,i)=>pwrap(t,o.widths[i]-2*pad,fs,true)),hh=Math.max(...L.map(l=>l.length))*lh+2*pad;
+  o.head.forEach((t,i)=>{const hl=(o.hl||[]).includes(i);ops.push(`${hl?'0.62 0.40 0.09':'0.16 0.20 0.28'} rg ${f(xs[i])} ${f(y-hh)} ${f(o.widths[i])} ${f(hh)} re f`);
+   L[i].forEach((ln,k)=>ops.push(`1 g BT /F2 ${fs} Tf ${f(xs[i]+(o.widths[i]-pw(ln,fs,true))/2)} ${f(y-pad-fs+1-k*lh-(hh-2*pad-L[i].length*lh)/2)} Td (${penc(ln)}) Tj ET`))});y-=hh};
+ const newPage=first=>{ops=[];pages.push(ops);y=PH-M;if(first){ops.push(T(o.title,M,y-12,14,true));ops.push(T(o.sub,M,y-26,9,false,true));y-=38}headRow()};
+ newPage(true);
+ o.rows.forEach(r=>{const L=r.map((t,i)=>pwrap(t,o.widths[i]-2*pad,fs,false)),rh=Math.max(o.minH||0,Math.max(...L.map(l=>l.length))*lh+2*pad);
+  if(y-rh<M+16)newPage(false);
+  r.forEach((t,i)=>{ops.push(`0.55 G 0.5 w ${f(xs[i])} ${f(y-rh)} ${f(o.widths[i])} ${f(rh)} re S`);
+   const off=(rh-L[i].length*lh)/2;L[i].forEach((ln,k)=>{if(ln)ops.push(T(ln,align(ln,i,fs,false),y-off-fs+1-k*lh,fs,false))})});y-=rh});
+ const n=pages.length;pages.forEach((p,i)=>p.push(T('Página '+(i+1)+' de '+n,PW-M-pw('Página '+(i+1)+' de '+n,8,false),18,8,false,true)));
+ const objs=[null,'<< /Type /Catalog /Pages 2 0 R >>',`<< /Type /Pages /Kids [${pages.map((_,i)=>(5+2*i)+' 0 R').join(' ')}] /Count ${n} >>`,
+  '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>'];
+ pages.forEach((p,i)=>{const s=p.join('\n');objs[5+2*i]=`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PW} ${PH}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${6+2*i} 0 R >>`;objs[6+2*i]=`<< /Length ${s.length} >>\nstream\n${s}\nendstream`});
+ let out='%PDF-1.4\n',offs=[];for(let i=1;i<objs.length;i++){offs[i]=out.length;out+=`${i} 0 obj\n${objs[i]}\nendobj\n`}
+ const xr=out.length;out+=`xref\n0 ${objs.length}\n0000000000 65535 f \n`+offs.slice(1).map(x=>String(x).padStart(10,'0')+' 00000 n \n').join('')+`trailer\n<< /Size ${objs.length} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`;
+ return Uint8Array.from(out,c=>c.charCodeAt(0))}
+function exportPdf(){
+ const say=t=>{$('#pdst').innerHTML=t},A=ORDS.filter(o=>DEC[o.id]==='A').sort(cmpPed);
+ if(!A.length){say('<span class="neg">Nenhum pedido aprovado para exportar.</span>');return}
+ const now=new Date(),mm=v=>v*72/25.4,tot=A.reduce((a,o)=>a+o.val,0),p2=n=>String(n).padStart(2,'0');
+ const bytes=buildPdf({title:'Pedidos aprovados',sub:'Emitido em '+now.toLocaleString('pt-BR')+' · '+A.length+' pedido(s)'+(PM.val?' · Valor total '+brl(tot):''),
+  head:['Pedido','Data','Cliente','CNPJ','Representante (Fantasia)','Regional','Valor do pedido','Observação','Qtd. volumes','Nº NF'],
+  rows:A.map(o=>[o.ped,dtStr(o),cliName(o),fmtCnpj(o.cnpj),o.rep,o.reg,PM.val?brl(o.val):'',o.obs,'','']),
+  widths:[18,18,52,33,38,22,24,40,16,16].map(mm),align:['l','l','l','l','l','l','r','l','c','c'],hl:[8,9],minH:mm(9)});
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+ a.download='pedidos-aprovados-'+now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate())+'.pdf';document.body.appendChild(a);a.click();
+ setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
+ say('PDF gerado com <b>'+A.length+'</b> pedido(s) aprovado(s).')}
 const PED_URL='http://localhost:5678/webhook/857f70d1-5118-4a66-9945-5e4b7b080aaa';
 $('#pdu').value=adapt(PED_URL);
 try{$('#pdu').value=adapt(localStorage.getItem('aval-ped-url2')||PED_URL);$('#pdm').value=localStorage.getItem('aval-ped-m')||'GET'}catch(x){}
@@ -366,7 +474,7 @@ $('#pdb').onclick=async()=>{
  if(!DATA.length){say('<span class="neg">Carregue antes a base financeira (Atualizar dados ou envio de arquivo).</span>');return}
  if(!/^https?:\/\//i.test(u)){say('<span class="neg">Informe a URL do webhook do n8n (começa com http:// ou https://).</span>');return}
  try{localStorage.setItem('aval-ped-url2',u);localStorage.setItem('aval-ped-m',m)}catch(x){}
- b.disabled=true;$('#pdmap').innerHTML='';say('Buscando pedidos no n8n…');
+ b.disabled=true;say('Buscando pedidos no n8n…');
  try{const L=listOf(await n8nGet(u,m,say));if(!L.length)throw new Error('o n8n não devolveu nenhum pedido.');showOrders(L);if(LASTMIS.length)await ecoRun();return true}
  catch(x){say('<span class="neg">Não foi possível buscar os pedidos: '+x.message+'</span>');return false}
  finally{b.disabled=false}};

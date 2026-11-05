@@ -15,7 +15,7 @@ Também dá para enviar um arquivo no cartão **Base de dados** (planilha `.xlsx
 
 ## Usar em qualquer estação da rede
 O `localhost` só existe na própria máquina; por isso a página precisa ser aberta a partir de um servidor da rede.
-1. **Hospede o dashboard** num computador que fique ligado (de preferência o mesmo do n8n). Copie `index.html`, `servidor-dashboard.js` e `iniciar-dashboard.bat` para uma pasta nele e dê dois cliques em `iniciar-dashboard.bat` (precisa do [Node.js](https://nodejs.org), que o n8n instalado por npm já tem). A janela mostra os endereços, por exemplo `http://192.168.0.10:8080`. Deixe-a aberta. Outra porta: `node servidor-dashboard.js 8081`.
+1. **Hospede o dashboard** num computador que fique ligado (de preferência o mesmo do n8n). Copie `index.html`, `servidor-dashboard.js` e `iniciar-dashboard.bat` para uma pasta nele e dê dois cliques em `iniciar-dashboard.bat` (precisa do [Node.js](https://nodejs.org), que o n8n instalado por npm já tem). A janela mostra os endereços, por exemplo `http://192.168.0.10:8080`. Deixe-a aberta. Se a 8080 estiver ocupada por outro programa, o script usa sozinho a próxima porta livre (8081, 8082...) e mostra qual é. Se o dashboard já estiver rodando, ele avisa em vez de dar erro. Para escolher a porta inicial: `node servidor-dashboard.js 9000`.
 2. **Nas estações**, abra esse endereço no navegador. Os endereços `localhost` dos webhooks são trocados automaticamente pelo endereço do servidor (o n8n deve estar no mesmo computador que hospeda a página; se não estiver, troque o endereço em *Configurar endereços*).
 3. **Libere as portas** no firewall do servidor (8080 do dashboard e 5678 do n8n). Se o n8n roda em Docker, publique a porta para a rede (`-p 5678:5678`, e não `-p 127.0.0.1:5678:5678`).
 4. Cada estação guarda a sua própria base no navegador. Clique em **Atualizar tudo** (ou marque *Atualizar tudo ao abrir a página*).
@@ -26,7 +26,13 @@ Atenção: os webhooks do n8n não têm senha, então qualquer computador da red
 Base financeira e pedidos: Webhook (GET ou POST, resposta pelo nó **Respond to Webhook**) → ... → **Respond to Webhook** com *All Incoming Items* (uma lista JSON, um objeto por linha).
 - Use a URL de **produção** (`/webhook/...`) com o workflow ativo. A URL de teste (`/webhook-test/...`) responde uma vez por clique em "Execute workflow".
 - Base financeira, colunas: `Cd_empresa`, `Nome_completo`, `Nf`, `Complemento`, `Valor`, `Saldo`, `Dt_vencimento`, `Dt_ultima_liqui`; opcional `Cd_centralizado` (reúne clientes em rede de lojas).
-- Pedidos: o campo do cliente é reconhecido automaticamente (`Cd_empresa`, `Cd_cliente`, `Cod_cliente`, `Cliente`...); se não for, a página mostra os campos e você escolhe. Aproveita também valor do pedido, número, nome e `cnpj`.
+- Pedidos: uma linha por pedido. A página reconhece sozinha os campos de cliente (`Cd_empresa`, `Cd_cliente`, `Cod_cliente`...), pedido, data, CNPJ, representante (fantasia), regional, valor, condição de pagamento (`Cond_pgto`, `Condicao_pagamento`, `Prazo`...) e observação. O que ela reconheceu aparece em **Campos do pedido** e dá para trocar qualquer campo ali (a escolha fica salva). Se o mesmo número de pedido vier em mais de uma linha, a primeira é usada.
+
+## Aprovar pedidos e exportar em PDF
+- Cada pedido aparece em **Pedidos para liberação**, com a nota e o parecer do cliente (ou da rede de lojas), o **valor do pedido** e a **condição de pagamento**. Os dois campos também aparecem na análise do cliente, junto com o total em aberto + pedido.
+- Cada pedido tem os botões **Aprovar** e **Reprovar** (clicar de novo desfaz). Há filtros por Pendentes, Aprovados e Reprovados. A decisão também pode ser dada na análise do cliente.
+- **Exportar aprovados (PDF)** gera um PDF A4 paisagem com: Pedido, Data, Cliente, CNPJ, Representante (Fantasia), Regional, Valor do pedido, Observação e, no final, as colunas em branco **Qtd. volumes** e **Nº NF** para preencher. O PDF é gerado no próprio navegador, sem biblioteca externa, e funciona offline.
+- As decisões ficam salvas **neste navegador** (cada estação tem as suas) e voltam ao buscar os pedidos de novo. O PDF contém os pedidos aprovados que a consulta atual devolve. **Limpar decisões** zera tudo.
 
 ## Data de fundação dos clientes sem histórico
 - **Padrão (campo em branco):** consulta direta na Receita Federal via [BrasilAPI](https://brasilapi.com.br), pelo **CNPJ do pedido** (o JSON de pedidos precisa trazer `cnpj`, `nr_cnpj` ou `cgc`). Sem token, 3 consultas simultâneas, repete automaticamente se houver limite de uso. Usa a data de início de atividade do CNPJ; para filiais, consulte pelo CNPJ da matriz para aproximar a fundação.
