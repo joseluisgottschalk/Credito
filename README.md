@@ -13,6 +13,15 @@ Dashboard em um único arquivo HTML (`index.html`) que avalia clientes e redes d
 
 Também dá para enviar um arquivo no cartão **Base de dados** (planilha `.xlsx`/`.csv` ou o JSON do n8n) e usar os botões **Atualizar só a base** e **Buscar pedidos e avaliar** separadamente.
 
+## Usar em qualquer estação da rede
+O `localhost` só existe na própria máquina; por isso a página precisa ser aberta a partir de um servidor da rede.
+1. **Hospede o dashboard** num computador que fique ligado (de preferência o mesmo do n8n). Copie `index.html`, `servidor-dashboard.js` e `iniciar-dashboard.bat` para uma pasta nele e dê dois cliques em `iniciar-dashboard.bat` (precisa do [Node.js](https://nodejs.org), que o n8n instalado por npm já tem). A janela mostra os endereços, por exemplo `http://192.168.0.10:8080`. Deixe-a aberta. Outra porta: `node servidor-dashboard.js 8081`.
+2. **Nas estações**, abra esse endereço no navegador. Os endereços `localhost` dos webhooks são trocados automaticamente pelo endereço do servidor (o n8n deve estar no mesmo computador que hospeda a página; se não estiver, troque o endereço em *Configurar endereços*).
+3. **Libere as portas** no firewall do servidor (8080 do dashboard e 5678 do n8n). Se o n8n roda em Docker, publique a porta para a rede (`-p 5678:5678`, e não `-p 127.0.0.1:5678:5678`).
+4. Cada estação guarda a sua própria base no navegador. Clique em **Atualizar tudo** (ou marque *Atualizar tudo ao abrir a página*).
+
+Atenção: os webhooks do n8n não têm senha, então qualquer computador da rede que conheça o endereço consegue consultar os dados financeiros. Se isso for um problema, proteja o Webhook com autenticação ou restrinja por IP.
+
 ## Webhooks n8n
 Base financeira e pedidos: Webhook (GET ou POST, resposta pelo nó **Respond to Webhook**) → ... → **Respond to Webhook** com *All Incoming Items* (uma lista JSON, um objeto por linha).
 - Use a URL de **produção** (`/webhook/...`) com o workflow ativo. A URL de teste (`/webhook-test/...`) responde uma vez por clique em "Execute workflow".

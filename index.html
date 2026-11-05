@@ -53,6 +53,7 @@ svg text{fill:var(--mut);font-size:10px}
 <div class="row" style="align-items:center"><span style="flex:0 0 150px">Base financeira</span><input type="text" id="n8u" placeholder="Webhook n8n, ex.: http://localhost:5678/webhook/..." style="flex:1 1 300px;width:auto"><select id="n8m" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select></div>
 <div class="row" style="align-items:center"><span style="flex:0 0 150px">Pedidos</span><input type="text" id="pdu" placeholder="Webhook n8n que consulta os pedidos" style="flex:1 1 300px;width:auto"><select id="pdm" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select></div>
 <div class="row" style="align-items:center"><span style="flex:0 0 150px">Data de fundação</span><input type="text" id="ecu" placeholder="Opcional. Em branco: consulta direta na Receita (BrasilAPI) pelo CNPJ do pedido" style="flex:1 1 300px;width:auto"></div>
+<div class="sub">Em outra estação da rede, o endereço <b>localhost</b> é trocado automaticamente pelo endereço do servidor que hospeda esta página.</div>
 <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="auto"> Atualizar tudo ao abrir a página</label>
 </div></details></div>
 
@@ -223,8 +224,12 @@ $('#upl').onchange=async e=>{const f=e.target.files[0];if(!f)return;st('Lendo '+
   await finish(build(XLSX.utils.sheet_to_json(wb.Sheets[nm],{header:1,raw:true,defval:null})),'Base: '+f.name+' ('+new Date().toLocaleDateString('pt-BR')+')');
  }catch(x){st('<span class="neg">Não foi possível atualizar: '+x.message+'</span>')}
  e.target.value=''};
+const BASE_URL='http://localhost:5678/webhook/23462e36-83b2-46bc-8859-e17719426d4a';
+// Aberta de outra estação da rede (ex.: http://192.168.0.10:8080), troca 'localhost' pelo endereço do servidor que hospeda esta página.
+function adapt(u){try{const L=location,loc=/^(localhost|127\.0\.0\.1|\[::1\])$/;if(!/^https?:$/.test(L.protocol)||loc.test(L.hostname)||!u)return u;const x=new URL(u);if(loc.test(x.hostname)){x.hostname=L.hostname;return x.toString()}}catch(e){}return u}
 const UK='aval-n8n-url',MK='aval-n8n-m';
-try{$('#n8u').value=localStorage.getItem(UK)||'';$('#n8m').value=localStorage.getItem(MK)||'GET'}catch(x){}
+$('#n8u').value=adapt(BASE_URL);
+try{$('#n8u').value=adapt(localStorage.getItem(UK)||BASE_URL);$('#n8m').value=localStorage.getItem(MK)||'GET'}catch(x){}
 $('#upd').onclick=async()=>{
  const u=$('#n8u').value.trim(),m=$('#n8m').value||'GET',b=$('#upd');
  if(!/^https?:\/\//i.test(u)){st('<span class="neg">Informe a URL do webhook do n8n (começa com http:// ou https://).</span>');return}
@@ -353,9 +358,9 @@ function showOrders(L,forced){
  $('#ped').querySelectorAll('tbody tr[data-c]').forEach(t=>t.onclick=()=>{cur=t.dataset.c;draw();document.getElementById('det').scrollIntoView({behavior:'smooth'})});
  draw()}
 const PED_URL='http://localhost:5678/webhook/857f70d1-5118-4a66-9945-5e4b7b080aaa';
-$('#pdu').value=PED_URL;
-try{$('#pdu').value=localStorage.getItem('aval-ped-url2')||PED_URL;$('#pdm').value=localStorage.getItem('aval-ped-m')||'GET'}catch(x){}
-try{$('#ecu').value=localStorage.getItem('aval-eco-url')||''}catch(x){}
+$('#pdu').value=adapt(PED_URL);
+try{$('#pdu').value=adapt(localStorage.getItem('aval-ped-url2')||PED_URL);$('#pdm').value=localStorage.getItem('aval-ped-m')||'GET'}catch(x){}
+try{$('#ecu').value=adapt(localStorage.getItem('aval-eco-url')||'')}catch(x){}
 $('#pdb').onclick=async()=>{
  const u=$('#pdu').value.trim(),m=$('#pdm').value||'GET',b=$('#pdb'),say=t=>{$('#pdst').innerHTML=t};
  if(!DATA.length){say('<span class="neg">Carregue antes a base financeira (Atualizar dados ou envio de arquivo).</span>');return}
