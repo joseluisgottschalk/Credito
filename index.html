@@ -45,10 +45,19 @@ svg text{fill:var(--mut);font-size:10px}
 <h1>Avaliação de clientes por pontualidade</h1>
 <div class="sub" id="ref"></div>
 
-<div class="card"><h2>Base de dados</h2><div class="row" style="align-items:center;margin-bottom:10px"><input type="text" id="n8u" placeholder="URL do webhook do n8n, ex.: http://localhost:5678/webhook/avaliacao-clientes" style="flex:1 1 340px;width:auto"><select id="n8m" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select><button class="p" id="upd">Atualizar dados</button></div><div class="row" style="align-items:center"><input type="file" id="upl" accept=".xlsx,.xls,.xlsm,.csv,.json,.txt" style="max-width:340px"><button id="rst">Limpar base salva</button></div><div id="st" class="sub" style="margin-top:8px"></div><div class="sub"><b>Atualizar dados</b> executa a rotina no n8n (webhook) e traz o resultado. Também dá para enviar um arquivo (planilha ou o JSON do n8n) com as colunas: Cd_empresa, Nome_completo, Nf, Complemento, Valor, Saldo, Dt_vencimento, Dt_ultima_liqui; opcional: Cd_centralizado, que reúne os clientes em rede de lojas). Os dados são lidos no seu navegador, sem passar por terceiros; a base nova fica salva neste navegador.</div></div>
-<div class="card"><h2>Pedidos</h2>
-<div class="row" style="align-items:center"><input type="text" id="pdu" placeholder="URL do webhook do n8n que consulta os pedidos, ex.: http://localhost:5678/webhook/..." style="flex:1 1 340px;width:auto"><select id="pdm" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select><button class="p" id="pdb">Buscar pedidos e avaliar</button></div>
-<div class="row" style="align-items:center;margin-top:10px"><input type="text" id="ecu" placeholder="Webhook n8n da Econodata (opcional): data de fundação dos clientes sem histórico" style="flex:1 1 340px;width:auto"></div>
+<div class="card"><h2>Atualização</h2>
+<div class="row" style="align-items:center"><button class="p" id="all" style="padding:11px 20px;font-size:15px">Atualizar tudo</button><span class="sub" id="allst"></span></div>
+<div class="sub" style="margin-top:8px">Em um clique: atualiza a base financeira, busca os pedidos, avalia os clientes e consulta a data de fundação de quem não tem histórico.</div>
+<details id="cfg"><summary>Configurar endereços (uma vez só; fica salvo neste navegador)</summary>
+<div style="margin-top:10px;display:grid;gap:8px">
+<div class="row" style="align-items:center"><span style="flex:0 0 150px">Base financeira</span><input type="text" id="n8u" placeholder="Webhook n8n, ex.: http://localhost:5678/webhook/..." style="flex:1 1 300px;width:auto"><select id="n8m" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select></div>
+<div class="row" style="align-items:center"><span style="flex:0 0 150px">Pedidos</span><input type="text" id="pdu" placeholder="Webhook n8n que consulta os pedidos" style="flex:1 1 300px;width:auto"><select id="pdm" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select></div>
+<div class="row" style="align-items:center"><span style="flex:0 0 150px">Data de fundação</span><input type="text" id="ecu" placeholder="Opcional. Em branco: consulta direta na Receita (BrasilAPI) pelo CNPJ do pedido" style="flex:1 1 300px;width:auto"></div>
+<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="auto"> Atualizar tudo ao abrir a página</label>
+</div></details></div>
+
+<div class="card"><h2>Base de dados</h2><div class="row" style="align-items:center"><button id="upd">Atualizar só a base</button><input type="file" id="upl" accept=".xlsx,.xls,.xlsm,.csv,.json,.txt" style="max-width:340px"><button id="rst">Limpar base salva</button></div><div id="st" class="sub" style="margin-top:8px"></div><div class="sub">Busque a base no n8n ou envie uma planilha ou o JSON do n8n. Colunas: Cd_empresa, Nome_completo, Nf, Complemento, Valor, Saldo, Dt_vencimento, Dt_ultima_liqui; opcional: Cd_centralizado, que reúne os clientes em rede de lojas. Os dados são lidos no seu navegador, sem passar por terceiros; a base nova fica salva neste navegador.</div></div>
+<div class="card"><h2>Pedidos</h2><div class="row" style="align-items:center"><button id="pdb">Buscar pedidos e avaliar</button></div>
 <div id="pdst" class="sub" style="margin-top:8px"></div><div id="pdmap" style="margin-top:6px"></div>
 <div class="sub">Busca os pedidos no n8n, identifica o cliente de cada pedido e avalia só esses clientes (redes de lojas incluídas). Requer a base financeira carregada.</div></div>
 <div id="ped"></div>
@@ -236,8 +245,8 @@ $('#upd').onclick=async()=>{
   let L;try{L=JSON.parse(txt)}catch(x){throw new Error('a resposta do n8n não é um JSON válido (primeiros caracteres: '+txt.slice(0,80).replace(/</g,'&lt;')+').')}
   txt=null;
   const extra=Array.isArray(L)?'':' <span class="neg">Atenção: o n8n devolveu um único objeto, e não a lista de parcelas. No nó Respond to Webhook, use “All Incoming Items”.</span>';
-  await finish(build(jsonToAoa(L)),'Base: n8n ('+new Date().toLocaleString('pt-BR')+')',extra)
- }catch(x){st('<span class="neg">Não foi possível atualizar: '+x.message+'</span>')}
+  await finish(build(jsonToAoa(L)),'Base: n8n ('+new Date().toLocaleString('pt-BR')+')',extra);return true
+ }catch(x){st('<span class="neg">Não foi possível atualizar: '+x.message+'</span>');return false}
  finally{clearTimeout(to);b.disabled=false}};
 
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -265,6 +274,23 @@ const CNPJ_EX=['cnpj','nr_cnpj','nu_cnpj','cd_cnpj','cnpj_cpf','cpf_cnpj','cgc',
  SIT_EX=['situacao_cadastral','situacao','situacao_cnpj','status'];
 const ECO={};let LASTL=null,LASTCK=null,LASTMIS=[];
 const anos=d=>(TODAY-d)/365.25;
+const ECK='aval-eco-cache';
+try{const c=JSON.parse(localStorage.getItem(ECK)||'{}');for(const k in c)ECO[k]={d:c[k].d,sit:c[k].sit||''}}catch(x){}
+function ecoSave(){try{const c={};for(const k in ECO)if(ECO[k].d!=null)c[k]={d:ECO[k].d,sit:ECO[k].sit};localStorage.setItem(ECK,JSON.stringify(c))}catch(x){}}
+async function receitaOne(cnpj){
+ for(let t=0;t<3;t++){
+  const r=await fetch('https://brasilapi.com.br/api/cnpj/v1/'+cnpj,{cache:'no-store'});
+  if(r.status===404||r.status===400)return{d:null,sit:''};
+  if(r.status===429||r.status>=500){await new Promise(z=>setTimeout(z,1500*(t+1)));continue}
+  if(!r.ok)throw new Error('a BrasilAPI respondeu '+r.status+'.');
+  const j=await r.json();return{d:toDay(j.data_inicio_atividade),sit:String(j.descricao_situacao_cadastral||'')}}
+ throw new Error('a BrasilAPI está limitando as consultas. Tente de novo em alguns minutos.')}
+async function receitaRun(todo,say){
+ const q=todo.filter(m=>{if(m.cnpj&&m.cnpj.length===14)return true;ECO[m.t]={d:null,sit:'',nc:true};return false});
+ let i=0,n=0,stop=false;
+ const w=async()=>{while(i<q.length&&!stop){const m=q[i++];try{ECO[m.t]=await receitaOne(m.cnpj)}catch(x){stop=true;throw x}n++;say('Consultando a Receita (BrasilAPI)… '+n+' de '+q.length)}};
+ try{await Promise.all([w(),w(),w()])}
+ catch(x){if(x instanceof TypeError)throw new Error('não consegui acessar a BrasilAPI (internet ou bloqueio do navegador).');throw x}}
 function ecoMerge(part,items){
  const keys=[...new Set(items.slice(0,200).flatMap(o=>Object.keys(o)))];
  const kc=pickKey(keys,['codigo','cd_empresa','cd_cliente','cod_cliente','codigo_cliente'],[]),kj=pickKey(keys,CNPJ_EX,['cnpj']),kf=pickKey(keys,FD_EX,['fundacao','abertura']),ks=pickKey(keys,SIT_EX,[]);
@@ -276,20 +302,23 @@ function ecoMerge(part,items){
  part.forEach(m=>{if(!ECO[m.t])ECO[m.t]={d:null,sit:''}})}
 async function ecoRun(){
  const u=$('#ecu').value.trim(),b=$('#ecb'),say=t=>{const e=$('#ecs');if(e)e.innerHTML=t};
- if(!/^https?:\/\//i.test(u)){say('<span class="neg">Informe a URL do webhook da Econodata no cartão Pedidos.</span>');return}
+ const sum=()=>{const ok=LASTMIS.filter(m=>ECO[m.t]&&ECO[m.t].d!=null).length,nc=LASTMIS.filter(m=>ECO[m.t]&&ECO[m.t].nc).length,nf=LASTMIS.filter(m=>ECO[m.t]&&ECO[m.t].d==null&&!ECO[m.t].nc).length;
+  return ok||nf||nc?'<b>'+ok+'</b> com data de fundação'+(nf?', '+nf+' não encontrado(s)':'')+(nc?', '+nc+' sem CNPJ no pedido (só é possível consultar com o CNPJ)':'')+'. ':''};
  try{localStorage.setItem('aval-eco-url',u)}catch(x){}
+ if(u&&!/^https?:\/\//i.test(u)){say('<span class="neg">O endereço da data de fundação não parece uma URL (deixe em branco para consultar direto na Receita).</span>');return false}
  const todo=LASTMIS.filter(m=>!ECO[m.t]);
- if(!todo.length){say('Todos os clientes desta lista já foram consultados.');return}
- b.disabled=true;let falha='';
- try{for(let i=0;i<todo.length;i+=50){
-   say('Consultando a Econodata… '+Math.min(i+50,todo.length)+' de '+todo.length);
-   const part=todo.slice(i,i+50);
-   ecoMerge(part,listOf(await n8nGet(u,'POST',say,{clientes:part.map(m=>({codigo:m.t,cnpj:m.cnpj,nome:m.nm}))})))}}
+ if(!todo.length){say(sum());return true}
+ if(b)b.disabled=true;let falha='';
+ try{
+  if(u){for(let i=0;i<todo.length;i+=50){
+    say('Consultando o webhook… '+Math.min(i+50,todo.length)+' de '+todo.length);
+    const part=todo.slice(i,i+50);
+    ecoMerge(part,listOf(await n8nGet(u,'POST',say,{clientes:part.map(m=>({codigo:m.t,cnpj:m.cnpj,nome:m.nm}))})))}}
+  else await receitaRun(todo,say)}
  catch(x){falha=x.message}
- const ok=LASTMIS.filter(m=>ECO[m.t]&&ECO[m.t].d!=null).length,nf=LASTMIS.filter(m=>ECO[m.t]&&ECO[m.t].d==null).length;
- showOrders(LASTL,LASTCK);
- say((ok||nf?'<b>'+ok+'</b> com data de fundação, '+nf+' não encontrado(s). ':'')+(falha?'<span class="neg">Não foi possível concluir: '+falha+'</span>':''));
- const nb=$('#ecb');if(nb)nb.disabled=false}
+ ecoSave();showOrders(LASTL,LASTCK);
+ say(sum()+(falha?'<span class="neg">Não foi possível concluir: '+falha+'</span>':''));
+ const nb=$('#ecb');if(nb)nb.disabled=false;return !falha}
 function showOrders(L,forced){
  const say=t=>{$('#pdst').innerHTML=t},keys=[...new Set(L.slice(0,200).flatMap(o=>Object.keys(o)))];
  let saved='';try{saved=localStorage.getItem('aval-ped-ck')||''}catch(x){}
@@ -316,8 +345,8 @@ function showOrders(L,forced){
  h+='</tbody></table></div><div class="sub" style="margin-top:6px">Parecer indicativo: Adequado (nota 70 ou mais), Acompanhar (50 a 69), Cautela (abaixo de 50).</div></div>';
  if(mis.length){const hc=mis.some(m=>m.cnpj),he=mis.some(m=>ECO[m.t]),hs=mis.some(m=>ECO[m.t]&&ECO[m.t].sit);
   const cols=['Código'].concat(mk?['Nome']:[]).concat(hc?['CNPJ']:[]).concat(['Pedidos']).concat(vk?['Valor']:[]).concat(he?['Fundação','Tempo de atividade']:[]).concat(hs?['Situação']:[]);
-  h+=`<div class="card"><h2>Clientes dos pedidos sem histórico na base (${mis.length})</h2><div class="row" style="align-items:center;margin-bottom:8px"><button class="p" id="ecb">Buscar data de fundação (Econodata)</button><span class="sub" id="ecs"></span></div><div class="tw"><table><thead><tr>${cols.map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${mis.map(m=>{const x=ECO[m.t];let ec='';
-   if(he){if(!x)ec='<td>—</td><td>—</td>';else if(x.d==null)ec='<td colspan="2" class="sub">não encontrado</td>';else{const an=anos(x.d);ec=`<td>${fd(x.d)}</td><td>${an.toLocaleString('pt-BR',{maximumFractionDigits:1})} anos${an<2?' <b class="neg">· empresa recente</b>':''}</td>`}}
+  h+=`<div class="card"><h2>Clientes dos pedidos sem histórico na base (${mis.length})</h2><div class="row" style="align-items:center;margin-bottom:8px"><button class="p" id="ecb">Buscar data de fundação</button><span class="sub" id="ecs"></span></div><div class="tw"><table><thead><tr>${cols.map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${mis.map(m=>{const x=ECO[m.t];let ec='';
+   if(he){if(!x)ec='<td>—</td><td>—</td>';else if(x.d==null)ec=`<td colspan="2" class="sub">${x.nc?'sem CNPJ no pedido':'não encontrado'}</td>`;else{const an=anos(x.d);ec=`<td>${fd(x.d)}</td><td>${an.toLocaleString('pt-BR',{maximumFractionDigits:1})} anos${an<2?' <b class="neg">· empresa recente</b>':''}</td>`}}
    return `<tr><td class="l">${esc(m.t)}</td>${mk?`<td class="l">${esc(m.nm)}</td>`:''}${hc?`<td>${esc(m.cnpj)}</td>`:''}<td>${m.n}</td>${vk?`<td>${brl(m.v)}</td>`:''}${ec}${hs?`<td>${esc(x&&x.sit||'')}</td>`:''}</tr>`}).join('')}</tbody></table></div><div class="sub" style="margin-top:6px">Cliente novo ou com código diferente do financeiro: não há parcelas na base para avaliar a pontualidade. Empresa recente: menos de 2 anos de atividade.</div></div>`}
  $('#ped').innerHTML=h;
  if(mis.length)$('#ecb').onclick=ecoRun;
@@ -331,9 +360,23 @@ $('#pdb').onclick=async()=>{
  if(!/^https?:\/\//i.test(u)){say('<span class="neg">Informe a URL do webhook do n8n (começa com http:// ou https://).</span>');return}
  try{localStorage.setItem('aval-ped-url',u);localStorage.setItem('aval-ped-m',m)}catch(x){}
  b.disabled=true;$('#pdmap').innerHTML='';say('Buscando pedidos no n8n…');
- try{const L=listOf(await n8nGet(u,m,say));if(!L.length)throw new Error('o n8n não devolveu nenhum pedido.');showOrders(L)}
- catch(x){say('<span class="neg">Não foi possível buscar os pedidos: '+x.message+'</span>')}
+ try{const L=listOf(await n8nGet(u,m,say));if(!L.length)throw new Error('o n8n não devolveu nenhum pedido.');showOrders(L);if(LASTMIS.length)await ecoRun();return true}
+ catch(x){say('<span class="neg">Não foi possível buscar os pedidos: '+x.message+'</span>');return false}
  finally{b.disabled=false}};
+$('#all').onclick=async()=>{
+ const b=$('#all'),say=t=>{$('#allst').innerHTML=t},has=id=>/^https?:\/\//i.test($(id).value.trim());
+ if(!has('#n8u')&&!has('#pdu')){say('<span class="neg">Configure antes os endereços do n8n.</span>');$('#cfg').open=true;return}
+ b.disabled=true;const out=[];
+ try{
+  if(has('#n8u')){say('Atualizando a base financeira…');const ok=await $('#upd').onclick();out.push(ok?'base atualizada':'<span class="neg">base não atualizada</span>');
+   if(!ok&&!DATA.length){say(out.join(' · '));return}}
+  if(has('#pdu')){say('Buscando pedidos e avaliando os clientes…');const ok=await $('#pdb').onclick();out.push(ok?'pedidos avaliados':'<span class="neg">pedidos não carregados</span>')}
+  say(out.join(' · ')+' · '+new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}))}
+ finally{b.disabled=false}};
+try{$('#auto').checked=localStorage.getItem('aval-auto')==='1'}catch(x){}
+$('#auto').onchange=()=>{try{localStorage.setItem('aval-auto',$('#auto').checked?'1':'0')}catch(x){}};
+if(!/^https?:\/\//i.test($('#n8u').value)&&!/^https?:\/\//i.test($('#pdu').value))$('#cfg').open=true;
 $('#rst').onclick=async()=>{try{await idbOp('readwrite',s=>s.delete('base'))}catch(x){}applyBase(ORIG,'Nenhuma base carregada');st('Base removida deste navegador.')};
-(async()=>{try{const s=await idbOp('readonly',s=>s.get('base'));if(s&&s.arr){applyBase(s.arr,s.label);st('Base carregada deste navegador: '+s.label)}}catch(x){}})();
+(async()=>{try{const s=await idbOp('readonly',s=>s.get('base'));if(s&&s.arr){applyBase(s.arr,s.label);st('Base carregada deste navegador: '+s.label)}}catch(x){}
+ try{if(localStorage.getItem('aval-auto')==='1')$('#all').onclick()}catch(x){}})();
 </script></body></html>
