@@ -48,6 +48,7 @@ svg text{fill:var(--mut);font-size:10px}
 <div class="card"><h2>Base de dados</h2><div class="row" style="align-items:center;margin-bottom:10px"><input type="text" id="n8u" placeholder="URL do webhook do n8n, ex.: http://localhost:5678/webhook/avaliacao-clientes" style="flex:1 1 340px;width:auto"><select id="n8m" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select><button class="p" id="upd">Atualizar dados</button></div><div class="row" style="align-items:center"><input type="file" id="upl" accept=".xlsx,.xls,.xlsm,.csv,.json,.txt" style="max-width:340px"><button id="rst">Limpar base salva</button></div><div id="st" class="sub" style="margin-top:8px"></div><div class="sub"><b>Atualizar dados</b> executa a rotina no n8n (webhook) e traz o resultado. Também dá para enviar um arquivo (planilha ou o JSON do n8n) com as colunas: Cd_empresa, Nome_completo, Nf, Complemento, Valor, Saldo, Dt_vencimento, Dt_ultima_liqui; opcional: Cd_centralizado, que reúne os clientes em rede de lojas). Os dados são lidos no seu navegador, sem passar por terceiros; a base nova fica salva neste navegador.</div></div>
 <div class="card"><h2>Pedidos</h2>
 <div class="row" style="align-items:center"><input type="text" id="pdu" placeholder="URL do webhook do n8n que consulta os pedidos, ex.: http://localhost:5678/webhook/..." style="flex:1 1 340px;width:auto"><select id="pdm" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select><button class="p" id="pdb">Buscar pedidos e avaliar</button></div>
+<div class="row" style="align-items:center;margin-top:10px"><input type="text" id="ecu" placeholder="Webhook n8n da Econodata (opcional): data de fundação dos clientes sem histórico" style="flex:1 1 340px;width:auto"></div>
 <div id="pdst" class="sub" style="margin-top:8px"></div><div id="pdmap" style="margin-top:6px"></div>
 <div class="sub">Busca os pedidos no n8n, identifica o cliente de cada pedido e avalia só esses clientes (redes de lojas incluídas). Requer a base financeira carregada.</div></div>
 <div id="ped"></div>
@@ -248,10 +249,10 @@ const CK_EX=['cd_empresa','cd_cliente','cdcliente','cod_cliente','codcliente','c
  NM_EX=['nome_completo','nome_cliente','nm_cliente','razao_social','cliente_nome','nome'];
 function listOf(L){if(!Array.isArray(L)){const k=L&&typeof L==='object'?Object.keys(L).find(k=>Array.isArray(L[k])):null;L=k?L[k]:(L&&typeof L==='object'?[L]:[])}
  return L.map(x=>x&&x.json&&typeof x.json==='object'?x.json:x).filter(x=>x&&typeof x==='object')}
-async function n8nGet(u,m,say){
+async function n8nGet(u,m,say,body){
  const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),20*60*1000);
  try{let resp;
-  try{resp=await fetch(u,{method:m,signal:ctl.signal,cache:'no-store'})}
+  try{resp=await fetch(u,{method:m,signal:ctl.signal,cache:'no-store',...(body?{headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{})})}
   catch(x){throw new Error(x.name==='AbortError'?'tempo esgotado (20 min) esperando o n8n.':'não consegui falar com o n8n. Confira se ele está rodando e a URL está certa. Na URL de teste (/webhook-test/), clique antes em “Execute workflow” no n8n: ela responde uma vez só. Confira também o CORS do nó Webhook.')}
   if(!resp.ok)throw new Error('o n8n respondeu '+resp.status+' '+(resp.statusText||'')+'. Confira se o workflow está ativo (ou aguardando o teste) e se o método ('+m+') é o mesmo do nó Webhook.');
   const txt=await resp.text();
@@ -259,6 +260,36 @@ async function n8nGet(u,m,say){
  }finally{clearTimeout(to)}}
 const find2=t=>find(t)||(/^\d+$/.test(t)?find(strip(t)||'0'):null);
 const RISK=e=>e.sc>=70?['Adequado','var(--ok)']:e.sc>=50?['Acompanhar','var(--w)']:['Cautela','var(--bad)'];
+const CNPJ_EX=['cnpj','nr_cnpj','nu_cnpj','cd_cnpj','cnpj_cpf','cpf_cnpj','cgc','nr_cgc','cnpjcpf'],
+ FD_EX=['data_fundacao','datafundacao','dt_fundacao','data_de_fundacao','data_abertura','dataabertura','dt_abertura','data_inicio_atividade','dt_inicio_atividade','data_inicio','fundacao','abertura'],
+ SIT_EX=['situacao_cadastral','situacao','situacao_cnpj','status'];
+const ECO={};let LASTL=null,LASTCK=null,LASTMIS=[];
+const anos=d=>(TODAY-d)/365.25;
+function ecoMerge(part,items){
+ const keys=[...new Set(items.slice(0,200).flatMap(o=>Object.keys(o)))];
+ const kc=pickKey(keys,['codigo','cd_empresa','cd_cliente','cod_cliente','codigo_cliente'],[]),kj=pickKey(keys,CNPJ_EX,['cnpj']),kf=pickKey(keys,FD_EX,['fundacao','abertura']),ks=pickKey(keys,SIT_EX,[]);
+ if(items.length&&!kf)throw new Error('não achei o campo da data de fundação na resposta. Campos recebidos: '+keys.map(esc).join(', ')+'. Renomeie no n8n (por exemplo, para data_fundacao).');
+ items.forEach(o=>{let code=kc?String(o[kc]==null?'':o[kc]).trim():'';
+  if(!code&&kj){const d=String(o[kj]==null?'':o[kj]).replace(/\D/g,''),m=d&&part.find(x=>x.cnpj===d);code=m?m.t:''}
+  if(!code)return;
+  ECO[code]={d:kf?toDay(o[kf]):null,sit:ks?String(o[ks]==null?'':o[ks]).trim():''}});
+ part.forEach(m=>{if(!ECO[m.t])ECO[m.t]={d:null,sit:''}})}
+async function ecoRun(){
+ const u=$('#ecu').value.trim(),b=$('#ecb'),say=t=>{const e=$('#ecs');if(e)e.innerHTML=t};
+ if(!/^https?:\/\//i.test(u)){say('<span class="neg">Informe a URL do webhook da Econodata no cartão Pedidos.</span>');return}
+ try{localStorage.setItem('aval-eco-url',u)}catch(x){}
+ const todo=LASTMIS.filter(m=>!ECO[m.t]);
+ if(!todo.length){say('Todos os clientes desta lista já foram consultados.');return}
+ b.disabled=true;let falha='';
+ try{for(let i=0;i<todo.length;i+=50){
+   say('Consultando a Econodata… '+Math.min(i+50,todo.length)+' de '+todo.length);
+   const part=todo.slice(i,i+50);
+   ecoMerge(part,listOf(await n8nGet(u,'POST',say,{clientes:part.map(m=>({codigo:m.t,cnpj:m.cnpj,nome:m.nm}))})))}}
+ catch(x){falha=x.message}
+ const ok=LASTMIS.filter(m=>ECO[m.t]&&ECO[m.t].d!=null).length,nf=LASTMIS.filter(m=>ECO[m.t]&&ECO[m.t].d==null).length;
+ showOrders(LASTL,LASTCK);
+ say((ok||nf?'<b>'+ok+'</b> com data de fundação, '+nf+' não encontrado(s). ':'')+(falha?'<span class="neg">Não foi possível concluir: '+falha+'</span>':''));
+ const nb=$('#ecb');if(nb)nb.disabled=false}
 function showOrders(L,forced){
  const say=t=>{$('#pdst').innerHTML=t},keys=[...new Set(L.slice(0,200).flatMap(o=>Object.keys(o)))];
  let saved='';try{saved=localStorage.getItem('aval-ped-ck')||''}catch(x){}
@@ -268,14 +299,14 @@ function showOrders(L,forced){
   $('#pdok').onclick=()=>showOrders(L,$('#pdck').value);return}
  if(forced){try{localStorage.setItem('aval-ped-ck',forced)}catch(x){}}
  $('#pdmap').innerHTML='';
- const vk=pickKey(keys,VK_EX,[]),nk=pickKey(keys,NK_EX,['pedido']),mk=pickKey(keys,NM_EX,[]),G=new Map(),miss=new Map();let sem=0;
+ const vk=pickKey(keys,VK_EX,[]),nk=pickKey(keys,NK_EX,['pedido']),mk=pickKey(keys,NM_EX,[]),ek=pickKey(keys,CNPJ_EX,['cnpj','cgc']),G=new Map(),miss=new Map();let sem=0;
  L.forEach(o=>{const t=o[ck]==null?'':String(o[ck]).trim();if(!t){sem++;return}
   const c=find2(t),val=vk?num(o[vk]):0;
   if(c){let g=G.get(c.c);if(!g)G.set(c.c,g={c,n:0,v:0});g.n++;g.v+=val}
-  else{let g=miss.get(t);if(!g)miss.set(t,g={t,nm:mk?String(o[mk]||'').trim():'',n:0,v:0});g.n++;g.v+=val}});
+  else{let g=miss.get(t);if(!g)miss.set(t,g={t,nm:mk?String(o[mk]||'').trim():'',cnpj:'',n:0,v:0});if(ek&&!g.cnpj)g.cnpj=String(o[ek]==null?'':o[ek]).replace(/\D/g,'');g.n++;g.v+=val}});
  const rows=[...G.values()].map(g=>({...g,e:ev(g.c)})).sort((a,b)=>a.e.sc-b.e.sc),mis=[...miss.values()].sort((a,b)=>b.v-a.v||b.n-a.n);
  const tv=rows.reduce((a,r)=>a+r.v,0)+mis.reduce((a,r)=>a+r.v,0),rv=rows.filter(r=>r.e.sc<50).reduce((a,r)=>a+r.v,0);
- SEL=rows.map(r=>r.c.c);cur=SEL[0]||null;
+ LASTL=L;LASTCK=ck;LASTMIS=mis;SEL=rows.map(r=>r.c.c);cur=SEL[0]||null;
  say('<b>'+L.length.toLocaleString('pt-BR')+'</b> pedido(s) lidos. Campo do cliente: <b>'+esc(ck)+'</b>'+(vk?'; valor: <b>'+esc(vk)+'</b>':'; valor do pedido não identificado')+'. '+rows.length+' cliente(s) avaliado(s), '+mis.length+' sem histórico na base.'+(sem?' '+sem+' pedido(s) sem código de cliente.':'')+' <a href="#" id="pdch">Trocar campo do cliente</a>');
  $('#pdch').onclick=ev_=>{ev_.preventDefault();try{localStorage.removeItem('aval-ped-ck')}catch(x){}$('#pdmap').innerHTML='Escolha o campo do cliente: <select id="pdck">'+keys.map(k=>`<option ${k===ck?'selected':''}>${esc(k)}</option>`).join('')+'</select> <button id="pdok">Usar este campo</button>';$('#pdok').onclick=()=>showOrders(L,$('#pdck').value)};
  let h=`<div class="kpis" style="margin-top:14px"><div class="k"><span>Pedidos</span><strong>${L.length.toLocaleString('pt-BR')}</strong></div><div class="k"><span>Clientes avaliados</span><strong>${rows.length}</strong></div>${vk?`<div class="k"><span>Valor dos pedidos</span><strong>${brl(tv)}</strong></div><div class="k"><span>Em clientes de risco (nota abaixo de 50)</span><strong class="${rv?'neg':''}">${brl(rv)}</strong></div>`:''}<div class="k"><span>Sem histórico na base</span><strong>${mis.length}</strong></div></div>`;
@@ -283,11 +314,17 @@ function showOrders(L,forced){
  h+=`<div class="card"><h2>Pedidos por cliente (do pior para o melhor, clique para detalhar)</h2><div class="tw"><table><thead><tr>${['Cliente','Pedidos'].concat(vk?['Valor']:[]).concat(['Nota','Classe','Vencido','Dias vencido','Parecer']).map(th).join('')}</tr></thead><tbody>`;
  rows.forEach(r=>{const z=RISK(r.e);h+=`<tr data-c="${esc(r.c.c)}"><td class="l">${esc(r.c.n)}<div class="sub">${r.c.rede?'Rede de lojas · '+r.c.L.length+' clientes':esc(r.c.c)}</div></td><td>${r.n}</td>${vk?`<td>${brl(r.v)}</td>`:''}<td><b>${r.e.sc}</b></td><td>${tag(r.e)}</td><td class="${r.e.vv?'neg':''}">${brl(r.e.vv)}</td><td>${r.e.md||'—'}</td><td><b style="color:${z[1]}">${z[0]}</b></td></tr>`});
  h+='</tbody></table></div><div class="sub" style="margin-top:6px">Parecer indicativo: Adequado (nota 70 ou mais), Acompanhar (50 a 69), Cautela (abaixo de 50).</div></div>';
- if(mis.length)h+=`<div class="card"><h2>Clientes dos pedidos sem histórico na base (${mis.length})</h2><div class="tw"><table><thead><tr>${['Código'].concat(mk?['Nome']:[]).concat(['Pedidos']).concat(vk?['Valor']:[]).map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${mis.map(m=>`<tr><td class="l">${esc(m.t)}</td>${mk?`<td class="l">${esc(m.nm)}</td>`:''}<td>${m.n}</td>${vk?`<td>${brl(m.v)}</td>`:''}</tr>`).join('')}</tbody></table></div><div class="sub" style="margin-top:6px">Cliente novo ou com código diferente do financeiro: não há parcelas na base para avaliar a pontualidade.</div></div>`;
+ if(mis.length){const hc=mis.some(m=>m.cnpj),he=mis.some(m=>ECO[m.t]),hs=mis.some(m=>ECO[m.t]&&ECO[m.t].sit);
+  const cols=['Código'].concat(mk?['Nome']:[]).concat(hc?['CNPJ']:[]).concat(['Pedidos']).concat(vk?['Valor']:[]).concat(he?['Fundação','Tempo de atividade']:[]).concat(hs?['Situação']:[]);
+  h+=`<div class="card"><h2>Clientes dos pedidos sem histórico na base (${mis.length})</h2><div class="row" style="align-items:center;margin-bottom:8px"><button class="p" id="ecb">Buscar data de fundação (Econodata)</button><span class="sub" id="ecs"></span></div><div class="tw"><table><thead><tr>${cols.map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${mis.map(m=>{const x=ECO[m.t];let ec='';
+   if(he){if(!x)ec='<td>—</td><td>—</td>';else if(x.d==null)ec='<td colspan="2" class="sub">não encontrado</td>';else{const an=anos(x.d);ec=`<td>${fd(x.d)}</td><td>${an.toLocaleString('pt-BR',{maximumFractionDigits:1})} anos${an<2?' <b class="neg">· empresa recente</b>':''}</td>`}}
+   return `<tr><td class="l">${esc(m.t)}</td>${mk?`<td class="l">${esc(m.nm)}</td>`:''}${hc?`<td>${esc(m.cnpj)}</td>`:''}<td>${m.n}</td>${vk?`<td>${brl(m.v)}</td>`:''}${ec}${hs?`<td>${esc(x&&x.sit||'')}</td>`:''}</tr>`}).join('')}</tbody></table></div><div class="sub" style="margin-top:6px">Cliente novo ou com código diferente do financeiro: não há parcelas na base para avaliar a pontualidade. Empresa recente: menos de 2 anos de atividade.</div></div>`}
  $('#ped').innerHTML=h;
+ if(mis.length)$('#ecb').onclick=ecoRun;
  $('#ped').querySelectorAll('tbody tr[data-c]').forEach(t=>t.onclick=()=>{cur=t.dataset.c;draw();document.getElementById('det').scrollIntoView({behavior:'smooth'})});
  draw()}
 try{$('#pdu').value=localStorage.getItem('aval-ped-url')||'';$('#pdm').value=localStorage.getItem('aval-ped-m')||'GET'}catch(x){}
+try{$('#ecu').value=localStorage.getItem('aval-eco-url')||''}catch(x){}
 $('#pdb').onclick=async()=>{
  const u=$('#pdu').value.trim(),m=$('#pdm').value||'GET',b=$('#pdb'),say=t=>{$('#pdst').innerHTML=t};
  if(!DATA.length){say('<span class="neg">Carregue antes a base financeira (Atualizar dados ou envio de arquivo).</span>');return}

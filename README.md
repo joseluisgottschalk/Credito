@@ -34,6 +34,18 @@ Observações:
 5. Campos opcionais que a página aproveita: valor do pedido (`Valor_pedido`, `Valor_total`, `Valor`...), número do pedido e nome do cliente.
 6. A URL de teste (`/webhook-test/...`) só responde uma vez por clique em "Execute workflow". Para uso contínuo, ative o workflow e use a URL de produção (`/webhook/...`).
 
+## Data de fundação dos clientes sem histórico (Econodata)
+A página **não chama a Econodata diretamente**: o token fica no n8n (nunca no navegador) e a página só conversa com o seu webhook.
+
+1. No cartão **Pedidos**, preencha o segundo campo com a URL do webhook n8n da Econodata. Depois de buscar os pedidos, a lista "Clientes dos pedidos sem histórico" ganha o botão **Buscar data de fundação (Econodata)**.
+2. A página envia `POST` com JSON, em lotes de até 50 clientes:
+   `{"clientes":[{"codigo":"900119","cnpj":"12345678111990","nome":"NOVO 119"}]}`
+   O `cnpj` vem do JSON de pedidos (campos `cnpj`, `nr_cnpj`, `cgc`...), somente dígitos. Se o pedido não trouxer CNPJ, o fluxo do n8n pode buscá-lo no banco pelo `codigo`.
+3. No n8n: **Webhook** (POST) → **Split Out** em `clientes` → **HTTP Request** à Econodata (endpoint e autenticação conforme a documentação/contrato da Econodata) → **Set** com os campos abaixo → **Respond to Webhook** (*All Incoming Items*).
+4. Cada item da resposta deve ter o `codigo` (ou o `cnpj`) e a data de fundação: `data_fundacao` (também reconhece `dt_fundacao`, `data_abertura`, `data_inicio_atividade`...), em `AAAA-MM-DD`, ISO ou `DD/MM/AAAA`. Opcional: `situacao` (situação cadastral).
+5. Resultado: colunas **Fundação**, **Tempo de atividade** e **Situação**. Empresas com menos de 2 anos ficam marcadas como "empresa recente". Quem a Econodata não devolver aparece como "não encontrado" e pode ser consultado de novo.
+6. Se a resposta não tiver nenhum campo de data reconhecido, a página mostra os campos recebidos para você renomear no n8n.
+
 ## Privacidade
 - A planilha é lida no navegador e **não é enviada a nenhum servidor**.
 - A base carregada fica salva no navegador de quem usou (IndexedDB). O botão **Limpar base salva** remove.
