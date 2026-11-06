@@ -31,7 +31,7 @@ Base financeira e pedidos: Webhook (GET ou POST, resposta pelo nó **Respond to 
 ## Aprovar pedidos e exportar em PDF
 - Cada pedido aparece em **Pedidos para liberação**, com a nota e o parecer do cliente (ou da rede de lojas), o **valor do pedido** e a **condição de pagamento**. Os dois campos também aparecem na análise do cliente, junto com o total em aberto + pedido.
 - Cada pedido tem os botões **Aprovar** e **Reprovar** (clicar de novo desfaz). Há filtros por Pendentes, Aprovados e Reprovados. A decisão também pode ser dada na análise do cliente.
-- **Exportar aprovados (PDF)** gera um PDF A4 paisagem com: Pedido, Data, Cliente, CNPJ, Representante (Fantasia), Regional, Valor do pedido, Observação e, no final, as colunas em branco **Qtd. volumes** e **Nº NF** para preencher. O PDF é gerado no próprio navegador, sem biblioteca externa, e funciona offline.
+- **Exportar aprovados (PDF)** gera um PDF A4 paisagem com: Pedido, Data, Cliente, CNPJ, Representante (campo Fantasia), Regional, Valor do pedido, Observação e, no final, as colunas em branco **Qtd. volumes** e **Nº NF** para preencher. O PDF é gerado no próprio navegador, sem biblioteca externa, e funciona offline.
 - As decisões ficam salvas **neste navegador** (cada estação tem as suas) e voltam ao buscar os pedidos de novo. O PDF contém os pedidos aprovados que a consulta atual devolve. **Limpar decisões** zera tudo.
 
 ## Data de fundação dos clientes sem histórico
@@ -46,3 +46,11 @@ Base financeira e pedidos: Webhook (GET ou POST, resposta pelo nó **Respond to 
 
 ## Dependências
 - [SheetJS](https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js) 0.18.5 (cdnjs), para ler planilhas.
+
+
+## Colunas do PDF de pedidos aprovados
+Pedido, Data, Cliente, CNPJ, Representante, Regional, UF, Valor do pedido, Fat., Observação, Qtd. volumes e Nº NF (as duas últimas em branco para preenchimento).
+
+- **UF**: lida do campo `UF` do pedido.
+- **Fat.**: baseada em `Total_faturamento` — **B** = igual a zero, **N** = diferente de zero (em branco se o campo não vier). A legenda aparece no cabeçalho do PDF.
+- Os campos são detectados automaticamente e podem ser ajustados em *Campos do pedido*.

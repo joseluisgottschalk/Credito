@@ -348,7 +348,9 @@ const PF=[
  ['cnpj','CNPJ',CNPJ_EX,['cnpj','cgc']],
  ['rep','Representante (fantasia)',['fantasia','representante_fantasia','fantasia_representante','fantasia_rep','fantasia_repres','nm_fantasia_representante','nome_fantasia_representante','representante','nome_representante','nm_representante','rep'],['repres','vendedor']],
  ['reg','Regional',['regional','nome_regional','nm_regional','regiao','cd_regional'],['regional','regiao']],
- ['val','Valor do pedido',VK_EX,['valor','vlr','vl','total'],['frete','icms','ipi','desc','unit','qtd','quant','comis','peso','imposto','taxa','juros','saldo','custo','item']],
+ ['uf','UF',['uf','sigla_uf','sg_uf','uf_cliente','uf_entrega','estado','sigla_estado','estado_cliente'],['uf_','_uf','estado']],
+ ['tf','Total faturamento',['total_faturamento','totalfaturamento','tot_faturamento','vl_faturamento','valor_faturamento','total_faturado','faturamento','faturado'],['faturam','faturad']],
+ ['val','Valor do pedido',VK_EX,['valor','vlr','vl','total'],['frete','icms','ipi','desc','unit','qtd','quant','comis','peso','imposto','taxa','juros','saldo','custo','item','faturam','faturad']],
  ['cond','Condição de pagamento',['condicao_pagamento','condicao_de_pagamento','cond_pagamento','cond_de_pagamento','cond_pgto','condicao_pgto','condpgto','cond_pagto','cond_pag','condicao','prazo_pagamento','prazo','forma_pagamento'],['cond','prazo','pgto']],
  ['obs','Observação',['observacao','observacoes','obs','obs_pedido','observacao_pedido','ds_observacao','historico'],['observ','obs']]];
 function mapFor(keys){let sv={};try{sv=JSON.parse(localStorage.getItem('aval-ped-map')||'{}')||{}}catch(x){}
@@ -366,8 +368,8 @@ function detOrders(c,e){
  const po=ORDS.filter(o=>o.ent===c.c);if(!po.length)return{kp:'',card:''};
  const vp=po.reduce((a,o)=>a+o.val,0),cs=[...new Set(po.map(o=>o.cond).filter(Boolean))],n=po.length;
  const kp=`<div class="kpis" style="margin-top:12px"><div class="k"><span>Valor do pedido${n>1?' ('+n+' pedidos)':''}</span><strong>${PM.val?brl(vp):'—'}</strong></div><div class="k"><span>Condição de pagamento</span><strong>${cs.length?esc(cs.join(' · ')):'—'}</strong></div>${PM.val?`<div class="k"><span>Em aberto + pedido</span><strong>${brl(e.tot+vp)}</strong></div>`:''}</div>`;
- const rede=c.rede,th=['Pedido','Data'].concat(rede?['Loja']:[]).concat(['Valor','Condição de pagamento','Observação','Decisão']);
- const card=`<div class="card"><h2>Pedidos deste cliente</h2><div class="tw"><table><thead><tr>${th.map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${po.map(o=>`<tr><td class="l"><b>${esc(o.ped||'—')}</b></td><td>${esc(dtStr(o))||'—'}</td>${rede?`<td class="l">${esc(cliName(o))}</td>`:''}<td>${PM.val?brl(o.val):'—'}</td><td>${esc(o.cond)||'—'}</td><td class="obs">${esc(o.obs)}</td><td style="white-space:nowrap">${decBtns(o)}</td></tr>`).join('')}</tbody></table></div></div>`;
+ const rede=c.rede,th=['Pedido','Data'].concat(rede?['Loja']:[]).concat(['Valor','Condição de pagamento','Fat.','Observação','Decisão']);
+ const card=`<div class="card"><h2>Pedidos deste cliente</h2><div class="tw"><table><thead><tr>${th.map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${po.map(o=>`<tr><td class="l"><b>${esc(o.ped||'—')}</b></td><td>${esc(dtStr(o))||'—'}</td>${rede?`<td class="l">${esc(cliName(o))}</td>`:''}<td>${PM.val?brl(o.val):'—'}</td><td>${esc(o.cond)||'—'}</td><td>${o.fat?`<b title="B = Total_faturamento zero; N = diferente de zero">${o.fat}</b>`:'—'}</td><td class="obs">${esc(o.obs)}</td><td style="white-space:nowrap">${decBtns(o)}</td></tr>`).join('')}</tbody></table></div></div>`;
  return{kp,card}}
 function renderPed(){
  const box=$('#pedo');if(!box)return;
@@ -375,13 +377,13 @@ function renderPed(){
  const vis=ORDS.filter(o=>FILT==='todos'||(FILT==='P'?!DEC[o.id]:DEC[o.id]===FILT));
  const fb=(k,l,n)=>`<button data-f="${k}" class="${FILT===k?'on':''}">${l} (${n})</button>`;
  let h=`<div class="card"><h2>Pedidos para liberação</h2><div class="flt">${fb('todos','Todos',ORDS.length)}${fb('P','Pendentes',cnt.P)}${fb('A','Aprovados',cnt.A)}${fb('R','Reprovados',cnt.R)}<span style="flex:1"></span><button class="p" id="pdf" ${cnt.A?'':'disabled'}>Exportar aprovados (PDF)</button><button id="decclr" ${cnt.A+cnt.R?'':'disabled'}>Limpar decisões</button></div>`;
- h+=`<div class="tw"><table><thead><tr>${['Pedido','Data','Cliente','Valor','Condição de pagamento','Nota','Classe','Vencido','Parecer','Observação','Decisão'].map((x,i)=>`<th style="cursor:default" class="${i==2||i==0?'l':''}">${x}</th>`).join('')}</tr></thead><tbody>`;
+ h+=`<div class="tw"><table><thead><tr>${['Pedido','Data','Cliente','Valor','Condição de pagamento','Fat.','Nota','Classe','Vencido','Parecer','Observação','Decisão'].map((x,i)=>`<th style="cursor:default" class="${i==2||i==0?'l':''}">${x}</th>`).join('')}</tr></thead><tbody>`;
  vis.forEach(o=>{const ent=o.ent?byCode[o.ent]:null,e=ent?ev(ent):null,z=e?RISK(e):null;
   let sub=ent?(ent.rede?'Rede de lojas · loja '+o.cod:o.cod):o.cod;
   if(!ent){const x=ECO[o.cod];if(x&&x.d!=null){const an=anos(x.d);sub+=' · fundada em '+fd(x.d)+' ('+an.toLocaleString('pt-BR',{maximumFractionDigits:1})+' anos'+(an<2?', recente':'')+')'}}
-  h+=`<tr${ent?` data-c="${esc(ent.c)}"`:''}><td class="l"><b>${esc(o.ped||'—')}</b></td><td>${esc(dtStr(o))||'—'}</td><td class="l">${esc(cliName(o))}<div class="sub">${esc(sub)}</div></td><td>${PM.val?brl(o.val):'—'}</td><td>${esc(o.cond)||'—'}</td><td>${e?`<b>${e.sc}</b>`:'—'}</td><td>${e?tag(e):'<span class="tag" style="background:var(--mut)">Sem histórico</span>'}</td><td class="${e&&e.vv?'neg':''}">${e?brl(e.vv):'—'}</td><td>${z?`<b style="color:${z[1]}">${z[0]}</b>`:'—'}</td><td class="obs">${esc(o.obs)}</td><td style="white-space:nowrap">${decBtns(o)}</td></tr>`});
- if(!vis.length)h+=`<tr><td colspan="11" class="emp" style="text-align:center">Nenhum pedido neste filtro.</td></tr>`;
- h+='</tbody></table></div><div class="sub" style="margin-top:6px">Clique na linha para ver a análise completa do cliente. Parecer indicativo: Adequado (nota 70 ou mais), Acompanhar (50 a 69), Cautela (abaixo de 50). As decisões ficam salvas neste navegador.</div></div>';
+  h+=`<tr${ent?` data-c="${esc(ent.c)}"`:''}><td class="l"><b>${esc(o.ped||'—')}</b></td><td>${esc(dtStr(o))||'—'}</td><td class="l">${esc(cliName(o))}<div class="sub">${esc(sub)}</div></td><td>${PM.val?brl(o.val):'—'}</td><td>${esc(o.cond)||'—'}</td><td>${o.fat?`<b title="B = Total_faturamento zero; N = diferente de zero">${o.fat}</b>`:'—'}</td><td>${e?`<b>${e.sc}</b>`:'—'}</td><td>${e?tag(e):'<span class="tag" style="background:var(--mut)">Sem histórico</span>'}</td><td class="${e&&e.vv?'neg':''}">${e?brl(e.vv):'—'}</td><td>${z?`<b style="color:${z[1]}">${z[0]}</b>`:'—'}</td><td class="obs">${esc(o.obs)}</td><td style="white-space:nowrap">${decBtns(o)}</td></tr>`});
+ if(!vis.length)h+=`<tr><td colspan="12" class="emp" style="text-align:center">Nenhum pedido neste filtro.</td></tr>`;
+ h+='</tbody></table></div><div class="sub" style="margin-top:6px">Clique na linha para ver a análise completa do cliente. Parecer indicativo: Adequado (nota 70 ou mais), Acompanhar (50 a 69), Cautela (abaixo de 50). Fat.: B = Total_faturamento igual a zero; N = diferente de zero. As decisões ficam salvas neste navegador.</div></div>';
  box.innerHTML=h}
 function showOrders(L){
  const say=t=>{$('#pdst').innerHTML=t},keys=[...new Set(L.slice(0,200).flatMap(o=>Object.keys(o)))];
@@ -391,7 +393,7 @@ function showOrders(L){
  const seen=new Set(),G=new Map(),miss=new Map();let sem=0,dup=0;ORDS=[];
  L.forEach((o,i)=>{const cod=tx(o,'cli');if(!cod){sem++;return}
   const ped=tx(o,'ped');if(ped){if(seen.has(ped)){dup++;return}seen.add(ped)}
-  const c=find2(cod),r={id:ped?'P'+ped:'#'+i,ped,dt:toDay(g(o,'data')),dts:tx(o,'data'),cod,nome:tx(o,'nome'),cnpj:tx(o,'cnpj').replace(/\D/g,''),rep:tx(o,'rep'),reg:tx(o,'reg'),val:PM.val?num(g(o,'val')):0,obs:tx(o,'obs'),cond:tx(o,'cond'),ent:c?c.c:null};
+  const c=find2(cod),r={id:ped?'P'+ped:'#'+i,ped,dt:toDay(g(o,'data')),dts:tx(o,'data'),cod,nome:tx(o,'nome'),cnpj:tx(o,'cnpj').replace(/\D/g,''),rep:tx(o,'rep'),reg:tx(o,'reg'),val:PM.val?num(g(o,'val')):0,obs:tx(o,'obs'),cond:tx(o,'cond'),uf:(u=>u.length===2?u.toUpperCase():u)(tx(o,'uf')),fat:tx(o,'tf')===''?'':(num(g(o,'tf'))===0?'B':'N'),ent:c?c.c:null};
   ORDS.push(r);
   if(c){let q=G.get(c.c);if(!q)G.set(c.c,q={c,n:0,v:0});q.n++;q.v+=r.val}
   else{let q=miss.get(cod);if(!q)miss.set(cod,q={t:cod,nm:r.nome,cnpj:'',n:0,v:0});if(!q.cnpj)q.cnpj=r.cnpj;q.n++;q.v+=r.val}});
@@ -401,10 +403,10 @@ function showOrders(L){
  const rows=[...G.values()].map(q=>({...q,e:ev(q.c)})).sort((a,b)=>a.e.sc-b.e.sc),mis=[...miss.values()].sort((a,b)=>b.v-a.v||b.n-a.n);
  const tv=ORDS.reduce((a,o)=>a+o.val,0),rv=rows.filter(r=>r.e.sc<50).reduce((a,r)=>a+r.v,0);
  LASTMIS=mis;const prev=cur;SEL=rows.map(r=>r.c.c);cur=SEL.includes(prev)?prev:(SEL[0]||null);
- const falta=[['val','valor do pedido'],['cond','condição de pagamento'],['ped','pedido']].filter(([f])=>!PM[f]).map(x=>x[1]);
+ const falta=[['val','valor do pedido'],['cond','condição de pagamento'],['ped','pedido'],['uf','UF'],['tf','Total_faturamento']].filter(([f])=>!PM[f]).map(x=>x[1]);
  if(falta.length)$('#pmap').open=true;
  const campo=(f,l)=>l+': '+(PM[f]?'<b>'+esc(PM[f])+'</b>':'<span class="neg">não identificado</span>');
- say('<b>'+ORDS.length.toLocaleString('pt-BR')+'</b> pedido(s) lidos. '+[['cli','cliente'],['ped','pedido'],['val','valor'],['cond','condição de pagamento']].map(([f,l])=>campo(f,l)).join('; ')+'. '+rows.length+' cliente(s) avaliado(s), '+mis.length+' sem histórico na base.'+(sem?' '+sem+' pedido(s) sem código de cliente (ignorados).':'')+(dup?' '+dup+' linha(s) repetida(s) do mesmo pedido (usei a primeira).':'')+(falta.length?' <span class="neg">Não identifiquei: '+falta.join(', ')+'.</span> Escolha o campo certo em “Campos do pedido” (já aberto abaixo). Campos recebidos: '+keys.map(esc).join(', ')+'.':''));
+ say('<b>'+ORDS.length.toLocaleString('pt-BR')+'</b> pedido(s) lidos. '+[['cli','cliente'],['ped','pedido'],['val','valor'],['cond','condição de pagamento'],['uf','UF'],['tf','faturamento']].map(([f,l])=>campo(f,l)).join('; ')+'. '+rows.length+' cliente(s) avaliado(s), '+mis.length+' sem histórico na base.'+(sem?' '+sem+' pedido(s) sem código de cliente (ignorados).':'')+(dup?' '+dup+' linha(s) repetida(s) do mesmo pedido (usei a primeira).':'')+(falta.length?' <span class="neg">Não identifiquei: '+falta.join(', ')+'.</span> Escolha o campo certo em “Campos do pedido” (já aberto abaixo). Campos recebidos: '+keys.map(esc).join(', ')+'.':''));
  let h=`<div class="kpis" style="margin-top:14px"><div class="k"><span>Pedidos</span><strong>${ORDS.length.toLocaleString('pt-BR')}</strong></div><div class="k"><span>Clientes avaliados</span><strong>${rows.length}</strong></div>${vk?`<div class="k"><span>Valor dos pedidos</span><strong>${brl(tv)}</strong></div><div class="k"><span>Em clientes de risco (nota abaixo de 50)</span><strong class="${rv?'neg':''}">${brl(rv)}</strong></div>`:''}<div class="k"><span>Sem histórico na base</span><strong>${mis.length}</strong></div></div><div id="pedo"></div>`;
 
  if(mis.length){const hc=mis.some(m=>m.cnpj),he=mis.some(m=>ECO[m.t]),hs=mis.some(m=>ECO[m.t]&&ECO[m.t].sit);
@@ -447,7 +449,7 @@ function buildPdf(o){
  const headRow=()=>{const L=o.head.map((t,i)=>pwrap(t,o.widths[i]-2*pad,fs,true)),hh=Math.max(...L.map(l=>l.length))*lh+2*pad;
   o.head.forEach((t,i)=>{const hl=(o.hl||[]).includes(i);ops.push(`${hl?'0.62 0.40 0.09':'0.16 0.20 0.28'} rg ${f(xs[i])} ${f(y-hh)} ${f(o.widths[i])} ${f(hh)} re f`);
    L[i].forEach((ln,k)=>ops.push(`1 g BT /F2 ${fs} Tf ${f(xs[i]+(o.widths[i]-pw(ln,fs,true))/2)} ${f(y-pad-fs+1-k*lh-(hh-2*pad-L[i].length*lh)/2)} Td (${penc(ln)}) Tj ET`))});y-=hh};
- const newPage=first=>{ops=[];pages.push(ops);y=PH-M;if(first){ops.push(T(o.title,M,y-12,14,true));ops.push(T(o.sub,M,y-26,9,false,true));y-=38}headRow()};
+ const newPage=first=>{ops=[];pages.push(ops);y=PH-M;if(first){ops.push(T(o.title,M,y-12,14,true));ops.push(T(o.sub,M,y-26,9,false,true));y-=38;if(o.sub2){ops.push(T(o.sub2,M,y-2,8,false,true));y-=12}}headRow()};
  newPage(true);
  o.rows.forEach(r=>{const L=r.map((t,i)=>pwrap(t,o.widths[i]-2*pad,fs,false)),rh=Math.max(o.minH||0,Math.max(...L.map(l=>l.length))*lh+2*pad);
   if(y-rh<M+16)newPage(false);
@@ -465,9 +467,10 @@ function exportPdf(){
  if(!A.length){say('<span class="neg">Nenhum pedido aprovado para exportar.</span>');return}
  const now=new Date(),mm=v=>v*72/25.4,tot=A.reduce((a,o)=>a+o.val,0),p2=n=>String(n).padStart(2,'0');
  const bytes=buildPdf({title:'Pedidos aprovados',sub:'Emitido em '+now.toLocaleString('pt-BR')+' · '+A.length+' pedido(s)'+(PM.val?' · Valor total '+brl(tot):''),
-  head:['Pedido','Data','Cliente','CNPJ','Representante (Fantasia)','Regional','Valor do pedido','Observação','Qtd. volumes','Nº NF'],
-  rows:A.map(o=>[o.ped,dtStr(o),cliName(o),fmtCnpj(o.cnpj),o.rep,o.reg,PM.val?brl(o.val):'',o.obs,'','']),
-  widths:[18,18,52,33,38,22,24,40,16,16].map(mm),align:['l','l','l','l','l','l','r','l','c','c'],hl:[8,9],minH:mm(9)});
+  sub2:'Fat.: B = Total_faturamento igual a zero; N = Total_faturamento diferente de zero.',
+  head:['Pedido','Data','Cliente','CNPJ','Representante','Regional','UF','Valor do pedido','Fat.','Observação','Qtd. volumes','Nº NF'],
+  rows:A.map(o=>[o.ped,dtStr(o),cliName(o),fmtCnpj(o.cnpj),o.rep,o.reg,o.uf,PM.val?brl(o.val):'',o.fat,o.obs,'','']),
+  widths:[17,17,46,31,33,20,10,23,10,36,15,19].map(mm),align:['l','l','l','l','l','l','c','r','c','l','c','c'],hl:[10,11],minH:mm(9)});
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
  a.download='pedidos-aprovados-'+now.getFullYear()+'-'+p2(now.getMonth()+1)+'-'+p2(now.getDate())+'.pdf';document.body.appendChild(a);a.click();
  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);
