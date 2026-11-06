@@ -449,7 +449,7 @@ function buildPdf(o){
  const headRow=()=>{const L=o.head.map((t,i)=>pwrap(t,o.widths[i]-2*pad,fs,true)),hh=Math.max(...L.map(l=>l.length))*lh+2*pad;
   o.head.forEach((t,i)=>{const hl=(o.hl||[]).includes(i);ops.push(`${hl?'0.62 0.40 0.09':'0.16 0.20 0.28'} rg ${f(xs[i])} ${f(y-hh)} ${f(o.widths[i])} ${f(hh)} re f`);
    L[i].forEach((ln,k)=>ops.push(`1 g BT /F2 ${fs} Tf ${f(xs[i]+(o.widths[i]-pw(ln,fs,true))/2)} ${f(y-pad-fs+1-k*lh-(hh-2*pad-L[i].length*lh)/2)} Td (${penc(ln)}) Tj ET`))});y-=hh};
- const newPage=first=>{ops=[];pages.push(ops);y=PH-M;if(first){ops.push(T(o.title,M,y-12,14,true));ops.push(T(o.sub,M,y-26,9,false,true));y-=38;if(o.sub2){ops.push(T(o.sub2,M,y-2,8,false,true));y-=12}}headRow()};
+ const newPage=first=>{ops=[];pages.push(ops);y=PH-M;if(first){ops.push(T(o.title,M,y-12,14,true));ops.push(T(o.sub,M,y-26,9,false,true));y-=38;if(o.sub2){ops.push(T(o.sub2,M,y-2,8,false,true));y-=12}if(o.sub3){ops.push(T(o.sub3,M,y-4,10,true));y-=16}}headRow()};
  newPage(true);
  o.rows.forEach(r=>{const L=r.map((t,i)=>pwrap(t,o.widths[i]-2*pad,fs,false)),rh=Math.max(o.minH||0,Math.max(...L.map(l=>l.length))*lh+2*pad);
   if(y-rh<M+16)newPage(false);
@@ -467,6 +467,7 @@ function exportPdf(){
  if(!A.length){say('<span class="neg">Nenhum pedido aprovado para exportar.</span>');return}
  const now=new Date(),mm=v=>v*72/25.4,tot=A.reduce((a,o)=>a+o.val,0),p2=n=>String(n).padStart(2,'0');
  const bytes=buildPdf({title:'Pedidos aprovados',sub:'Emitido em '+now.toLocaleString('pt-BR')+' · '+A.length+' pedido(s)'+(PM.val?' · Valor total '+brl(tot):''),
+  sub3:'Total de pedidos: '+A.length+(PM.val?' ('+brl(tot)+')':'')+'   |   Pedidos a faturar (N): '+A.filter(x=>x.fat==='N').length+(PM.val?' ('+brl(A.filter(x=>x.fat==='N').reduce((a,x)=>a+x.val,0))+')':''),
   sub2:'Fat.: B = Total_faturamento igual a zero; N = Total_faturamento diferente de zero.',
   head:['Pedido','Data','Cliente','CNPJ','Representante','Regional','UF','Valor do pedido','Fat.','Observação','Qtd. volumes','Nº NF'],
   rows:A.map(o=>[o.ped,dtStr(o),cliName(o),fmtCnpj(o.cnpj),o.rep,o.reg,o.uf,PM.val?brl(o.val):'',o.fat,o.obs,'','']),
