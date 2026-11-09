@@ -10,7 +10,7 @@
 :root[data-theme="dark"]{--bg:#121519;--card:#1b2027;--tx:#e7ebf0;--mut:#98a3b3;--bd:#2b323c;--ac:#6b96ff;--ok:#3ecf8e;--b:#8fcf6a;--w:#f0b429;--r:#f08a45;--bad:#f06a6a}
 *{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-.wrap{max-width:1180px;margin:0 auto;padding:16px}
+.wrap{max-width:1440px;margin:0 auto;padding:16px}
 h1{font-size:20px;margin:0 0 2px}h2{font-size:15px;margin:0 0 10px}.sub{color:var(--mut);font-size:12.5px}
 .card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-top:14px;box-shadow:var(--sh)}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}
@@ -42,6 +42,10 @@ details{margin-top:12px;color:var(--mut);font-size:12.5px}
 svg text{fill:var(--mut);font-size:10px}
 .emp{color:var(--mut);padding:14px 0}
 .dec{padding:4px 9px;font-size:12px;border-radius:6px;margin-left:4px}
+table.pt{font-size:12px;table-layout:auto}table.pt th,table.pt td{padding:6px 5px;white-space:normal;vertical-align:middle}
+table.pt td.nw,table.pt th.nw{white-space:nowrap}table.pt td.obs{min-width:120px;max-width:none}
+td.dc{white-space:nowrap;text-align:left}.dec.on-a,.dec.on-r{font-weight:700;box-shadow:0 0 0 2px color-mix(in srgb,currentColor 25%,transparent)}
+.dec.off{opacity:.45}.dst{display:block;font-size:11px;margin-top:2px;font-weight:600}.dst.a{color:var(--ok)}.dst.r{color:var(--bad)}
 .dec.on-a{background:var(--ok);border-color:var(--ok);color:#fff}
 .dec.on-r{background:var(--bad);border-color:var(--bad);color:#fff}
 .flt{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
@@ -363,7 +367,8 @@ const fmtCnpj=d=>d&&d.length===14?`${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8
 const cmpPed=(a,b)=>String(a.ped).localeCompare(String(b.ped),'pt-BR',{numeric:true});
 function cliName(o){if(o.nome)return o.nome;const c=o.ent?byCode[o.ent]:null;if(c){if(c.rede){const s=c.L.find(x=>strip(x.c)===strip(o.cod));return s?s.n:c.n}return c.n}return o.cod}
 const dtStr=o=>o.dt!=null?fd(o.dt):(o.dts||'');
-function decBtns(o){const s=DEC[o.id],i=esc(o.id);return `<button class="dec ${s==='A'?'on-a':''}" data-d="A" data-o="${i}">Aprovar</button><button class="dec ${s==='R'?'on-r':''}" data-d="R" data-o="${i}">Reprovar</button>`}
+function decBtns(o){const s=DEC[o.id],i=esc(o.id);
+ return `<button class="dec ${s==='A'?'on-a':s?'off':''}" data-d="A" data-o="${i}" title="${s==='A'?'Pedido já aprovado':'Aprovar pedido'}">${s==='A'?'✔ Aprovado':'Aprovar'}</button><button class="dec ${s==='R'?'on-r':s?'off':''}" data-d="R" data-o="${i}" title="${s==='R'?'Pedido já reprovado':'Reprovar pedido'}">${s==='R'?'✖ Reprovado':'Reprovar'}</button>`}
 function decSave(){try{localStorage.setItem('aval-ped-dec',JSON.stringify(DEC))}catch(x){}}
 const AP_C={A:'19',R:'06'},SYNCING={};
 function apUrl(){const u=($('#apu').value||'').trim();return /^https?:\/\//i.test(u)?u:''}
@@ -380,11 +385,13 @@ async function apPost(u,body){
  finally{clearTimeout(to)}}
 async function setDec(id,s){
  const u=apUrl(),say=t=>{$('#pdst').innerHTML=t};
- if(!u){if(DEC[id]===s)delete DEC[id];else DEC[id]=s;afterDec();return}
+ const o0=ORDS.find(x=>x.id===id),nm=s=>s==='A'?'aprovado':'reprovado';
+ if(DEC[id]===s){say('Pedido '+esc(o0?o0.ped:'')+' já está '+nm(s)+'. Nada a fazer.');return}
+ if(DEC[id]&&!confirm('O pedido '+(o0?o0.ped:'')+' já está '+nm(DEC[id])+'. Deseja alterar para '+nm(s)+'?'))return;
+ if(!u){DEC[id]=s;afterDec();return}
  const o=ORDS.find(x=>x.id===id);
  if(!o||!o.ped){say('<span class="neg">Este pedido não tem número; não dá para gravar no banco.</span>');return}
- if(DEC[id]===s){say('Pedido '+esc(o.ped)+' já está gravado como '+(s==='A'?'aprovado (19)':'reprovado (06)')+'. Para mudar, clique na outra opção.');return}
- if(SYNCING[id])return;
+  if(SYNCING[id])return;
  SYNCING[id]=1;say('Gravando pedido '+esc(o.ped)+' no banco…');
  try{const j=await apPost(u,{pedido:o.ped,empresa:o.emp||null,decisao:s==='A'?'APROVADO':'REPROVADO',controle:AP_C[s],cliente:o.cod});
   DEC[id]=s;afterDec();
@@ -395,8 +402,8 @@ function detOrders(c,e){
  const po=ORDS.filter(o=>o.ent===c.c);if(!po.length)return{kp:'',card:''};
  const vp=po.reduce((a,o)=>a+o.val,0),cs=[...new Set(po.map(o=>o.cond).filter(Boolean))],n=po.length;
  const kp=`<div class="kpis" style="margin-top:12px"><div class="k"><span>Valor do pedido${n>1?' ('+n+' pedidos)':''}</span><strong>${PM.val?brl(vp):'—'}</strong></div><div class="k"><span>Condição de pagamento</span><strong>${cs.length?esc(cs.join(' · ')):'—'}</strong></div>${PM.val?`<div class="k"><span>Em aberto + pedido</span><strong>${brl(e.tot+vp)}</strong></div>`:''}</div>`;
- const rede=c.rede,th=['Pedido','Data'].concat(rede?['Loja']:[]).concat(['Valor','Condição de pagamento','Fat.','Observação','Decisão']);
- const card=`<div class="card"><h2>Pedidos deste cliente</h2><div class="tw"><table><thead><tr>${th.map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${po.map(o=>`<tr><td class="l"><b>${esc(o.ped||'—')}</b></td><td>${esc(dtStr(o))||'—'}</td>${rede?`<td class="l">${esc(cliName(o))}</td>`:''}<td>${PM.val?brl(o.val):'—'}</td><td>${esc(o.cond)||'—'}</td><td>${o.fat?`<b title="B = Total_faturamento zero; N = diferente de zero">${o.fat}</b>`:'—'}</td><td class="obs">${esc(o.obs)}</td><td style="white-space:nowrap">${decBtns(o)}</td></tr>`).join('')}</tbody></table></div></div>`;
+ const rede=c.rede,th=['Pedido','Decisão','Data'].concat(rede?['Loja']:[]).concat(['Valor','Condição de pagamento','Fat.','Observação']);
+ const card=`<div class="card"><h2>Pedidos deste cliente</h2><div class="tw"><table class="pt"><thead><tr>${th.map((x,i)=>`<th style="cursor:default" class="${i?'':'l'}">${x}</th>`).join('')}</tr></thead><tbody>${po.map(o=>`<tr><td class="l nw"><b>${esc(o.ped||'—')}</b></td><td class="dc">${decBtns(o)}</td><td class="nw">${esc(dtStr(o))||'—'}</td>${rede?`<td class="l">${esc(cliName(o))}</td>`:''}<td>${PM.val?brl(o.val):'—'}</td><td>${esc(o.cond)||'—'}</td><td>${o.fat?`<b title="B = Total_faturamento zero; N = diferente de zero">${o.fat}</b>`:'—'}</td><td class="obs">${esc(o.obs)}</td></tr>`).join('')}</tbody></table></div></div>`;
  return{kp,card}}
 function renderPed(){
  const box=$('#pedo');if(!box)return;
@@ -404,11 +411,11 @@ function renderPed(){
  const vis=ORDS.filter(o=>FILT==='todos'||(FILT==='P'?!DEC[o.id]:DEC[o.id]===FILT));
  const fb=(k,l,n)=>`<button data-f="${k}" class="${FILT===k?'on':''}">${l} (${n})</button>`;
  let h=`<div class="card"><h2>Pedidos para liberação</h2><div class="flt">${fb('todos','Todos',ORDS.length)}${fb('P','Pendentes',cnt.P)}${fb('A','Aprovados',cnt.A)}${fb('R','Reprovados',cnt.R)}<span style="flex:1"></span><button class="p" id="pdf" ${cnt.A?'':'disabled'}>Exportar aprovados (PDF)</button><button id="decclr" ${cnt.A+cnt.R?'':'disabled'}>Limpar decisões</button></div>`;
- h+=`<div class="tw"><table><thead><tr>${['Pedido','Data','Cliente','Valor','Condição de pagamento','Fat.','Nota','Classe','Vencido','Parecer','Observação','Decisão'].map((x,i)=>`<th style="cursor:default" class="${i==2||i==0?'l':''}">${x}</th>`).join('')}</tr></thead><tbody>`;
+ h+=`<div class="tw"><table class="pt"><thead><tr>${['Pedido','Decisão','Data','Cliente','Valor','Condição de pagamento','Fat.','Nota','Classe','Vencido','Parecer','Observação'].map((x,i)=>`<th style="cursor:default" class="${i==3||i==0?'l':''}${i==1?' dc':''}">${x}</th>`).join('')}</tr></thead><tbody>`;
  vis.forEach(o=>{const ent=o.ent?byCode[o.ent]:null,e=ent?ev(ent):null,z=e?RISK(e):null;
   let sub=ent?(ent.rede?'Rede de lojas · loja '+o.cod:o.cod):o.cod;
   if(!ent){const x=ECO[o.cod];if(x&&x.d!=null){const an=anos(x.d);sub+=' · fundada em '+fd(x.d)+' ('+an.toLocaleString('pt-BR',{maximumFractionDigits:1})+' anos'+(an<2?', recente':'')+')'}}
-  h+=`<tr${ent?` data-c="${esc(ent.c)}"`:''}><td class="l"><b>${esc(o.ped||'—')}</b></td><td>${esc(dtStr(o))||'—'}</td><td class="l">${esc(cliName(o))}<div class="sub">${esc(sub)}</div></td><td>${PM.val?brl(o.val):'—'}</td><td>${esc(o.cond)||'—'}</td><td>${o.fat?`<b title="B = Total_faturamento zero; N = diferente de zero">${o.fat}</b>`:'—'}</td><td>${e?`<b>${e.sc}</b>`:'—'}</td><td>${e?tag(e):'<span class="tag" style="background:var(--mut)">Sem histórico</span>'}</td><td class="${e&&e.vv?'neg':''}">${e?brl(e.vv):'—'}</td><td>${z?`<b style="color:${z[1]}">${z[0]}</b>`:'—'}</td><td class="obs">${esc(o.obs)}</td><td style="white-space:nowrap">${decBtns(o)}</td></tr>`});
+  h+=`<tr${ent?` data-c="${esc(ent.c)}"`:''}><td class="l nw"><b>${esc(o.ped||'—')}</b></td><td class="dc">${decBtns(o)}</td><td class="nw">${esc(dtStr(o))||'—'}</td><td class="l">${esc(cliName(o))}<div class="sub">${esc(sub)}</div></td><td>${PM.val?brl(o.val):'—'}</td><td>${esc(o.cond)||'—'}</td><td>${o.fat?`<b title="B = Total_faturamento zero; N = diferente de zero">${o.fat}</b>`:'—'}</td><td>${e?`<b>${e.sc}</b>`:'—'}</td><td>${e?tag(e):'<span class="tag" style="background:var(--mut)">Sem histórico</span>'}</td><td class="${e&&e.vv?'neg':''}">${e?brl(e.vv):'—'}</td><td>${z?`<b style="color:${z[1]}">${z[0]}</b>`:'—'}</td><td class="obs">${esc(o.obs)}</td></tr>`});
  if(!vis.length)h+=`<tr><td colspan="12" class="emp" style="text-align:center">Nenhum pedido neste filtro.</td></tr>`;
  h+='</tbody></table></div><div class="sub" style="margin-top:6px">Clique na linha para ver a análise completa do cliente. Parecer indicativo: Adequado (nota 70 ou mais), Acompanhar (50 a 69), Cautela (abaixo de 50). Fat.: B = Total_faturamento igual a zero; N = diferente de zero. As decisões ficam salvas neste navegador.</div></div>';
  box.innerHTML=h}
