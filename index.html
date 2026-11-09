@@ -58,6 +58,7 @@ td.obs{white-space:normal;min-width:140px;max-width:240px;text-align:left}
 <div style="margin-top:10px;display:grid;gap:8px">
 <div class="row" style="align-items:center"><span style="flex:0 0 150px">Base financeira</span><input type="text" id="n8u" placeholder="Webhook n8n, ex.: http://localhost:5678/webhook/..." style="flex:1 1 300px;width:auto"><select id="n8m" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select></div>
 <div class="row" style="align-items:center"><span style="flex:0 0 150px">Pedidos</span><input type="text" id="pdu" placeholder="Webhook n8n que consulta os pedidos" style="flex:1 1 300px;width:auto"><select id="pdm" title="Método HTTP do webhook"><option>GET</option><option>POST</option></select></div>
+<div class="row" style="align-items:center"><span style="flex:0 0 150px">Aprovação de pedidos</span><input type="text" id="apu" placeholder="Opcional. Webhook n8n (POST) que grava a decisão no banco: Aprovar = 19, Reprovar = 06" style="flex:1 1 300px;width:auto"></div>
 <div class="row" style="align-items:center"><span style="flex:0 0 150px">Data de fundação</span><input type="text" id="ecu" placeholder="Opcional. Em branco: consulta direta na Receita (BrasilAPI) pelo CNPJ do pedido" style="flex:1 1 300px;width:auto"></div>
 <div class="sub">Em outra estação da rede, o endereço <b>localhost</b> é trocado automaticamente pelo endereço do servidor que hospeda esta página.</div>
 <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="auto"> Atualizar tudo ao abrir a página</label>
@@ -348,6 +349,7 @@ const PF=[
  ['cnpj','CNPJ',CNPJ_EX,['cnpj','cgc']],
  ['rep','Representante (fantasia)',['fantasia','representante_fantasia','fantasia_representante','fantasia_rep','fantasia_repres','nm_fantasia_representante','nome_fantasia_representante','representante','nome_representante','nm_representante','rep'],['repres','vendedor']],
  ['reg','Regional',['regional','nome_regional','nm_regional','regiao','cd_regional'],['regional','regiao']],
+ ['emp','Empresa do pedido',['cd_empresa','empresa','cd_emp','cod_empresa','cd_filial','filial'],['empresa','filial']],
  ['uf','UF',['uf','sigla_uf','sg_uf','uf_cliente','uf_entrega','estado','sigla_estado','estado_cliente'],['uf_','_uf','estado']],
  ['tf','Total faturamento',['total_faturamento','totalfaturamento','tot_faturamento','vl_faturamento','valor_faturamento','total_faturado','faturamento','faturado'],['faturam','faturad']],
  ['val','Valor do pedido',VK_EX,['valor','vlr','vl','total'],['frete','icms','ipi','desc','unit','qtd','quant','comis','peso','imposto','taxa','juros','saldo','custo','item','faturam','faturad']],
@@ -363,7 +365,32 @@ function cliName(o){if(o.nome)return o.nome;const c=o.ent?byCode[o.ent]:null;if(
 const dtStr=o=>o.dt!=null?fd(o.dt):(o.dts||'');
 function decBtns(o){const s=DEC[o.id],i=esc(o.id);return `<button class="dec ${s==='A'?'on-a':''}" data-d="A" data-o="${i}">Aprovar</button><button class="dec ${s==='R'?'on-r':''}" data-d="R" data-o="${i}">Reprovar</button>`}
 function decSave(){try{localStorage.setItem('aval-ped-dec',JSON.stringify(DEC))}catch(x){}}
-function setDec(id,s){if(DEC[id]===s)delete DEC[id];else DEC[id]=s;decSave();renderPed();if(cur&&byCode[cur]&&$('#det'))detail(byCode[cur])}
+const AP_C={A:'19',R:'06'},SYNCING={};
+function apUrl(){const u=($('#apu').value||'').trim();return /^https?:\/\//i.test(u)?u:''}
+function afterDec(){decSave();renderPed();if(cur&&byCode[cur]&&$('#det'))detail(byCode[cur])}
+async function apPost(u,body){
+ const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),30000);
+ try{let r;
+  try{r=await fetch(u,{method:'POST',signal:ctl.signal,cache:'no-store',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})}
+  catch(x){throw new Error(x.name==='AbortError'?'tempo esgotado (30 s) esperando o n8n.':'não consegui falar com o n8n (confira a URL, se o workflow está ativo e o CORS do Webhook).')}
+  const t=await r.text();let j=null;try{j=JSON.parse(t)}catch(x){}
+  if(Array.isArray(j))j=j[0];
+  if(!r.ok||!j||j.ok!==true)throw new Error((j&&(j.erro||j.error||j.message))||('o n8n respondeu '+r.status+(j?'':' sem JSON válido')+'.'));
+  return j}
+ finally{clearTimeout(to)}}
+async function setDec(id,s){
+ const u=apUrl(),say=t=>{$('#pdst').innerHTML=t};
+ if(!u){if(DEC[id]===s)delete DEC[id];else DEC[id]=s;afterDec();return}
+ const o=ORDS.find(x=>x.id===id);
+ if(!o||!o.ped){say('<span class="neg">Este pedido não tem número; não dá para gravar no banco.</span>');return}
+ if(DEC[id]===s){say('Pedido '+esc(o.ped)+' já está gravado como '+(s==='A'?'aprovado (19)':'reprovado (06)')+'. Para mudar, clique na outra opção.');return}
+ if(SYNCING[id])return;
+ SYNCING[id]=1;say('Gravando pedido '+esc(o.ped)+' no banco…');
+ try{const j=await apPost(u,{pedido:o.ped,empresa:o.emp||null,decisao:s==='A'?'APROVADO':'REPROVADO',controle:AP_C[s],cliente:o.cod});
+  DEC[id]=s;afterDec();
+  say('<span class="pos">Pedido '+esc(o.ped)+' gravado como '+(s==='A'?'aprovado':'reprovado')+' (controle '+AP_C[s]+')</span>'+(j.fapedido!=null?' · fapedido: '+esc(j.fapedido)+' · faitempe: '+esc(j.faitempe):'')+'.')}
+ catch(x){say('<span class="neg">Não gravei o pedido '+esc(o.ped)+' no banco: '+esc(x.message)+' A decisão não foi aplicada.</span>')}
+ finally{delete SYNCING[id]}}
 function detOrders(c,e){
  const po=ORDS.filter(o=>o.ent===c.c);if(!po.length)return{kp:'',card:''};
  const vp=po.reduce((a,o)=>a+o.val,0),cs=[...new Set(po.map(o=>o.cond).filter(Boolean))],n=po.length;
@@ -393,7 +420,7 @@ function showOrders(L){
  const seen=new Set(),G=new Map(),miss=new Map();let sem=0,dup=0;ORDS=[];
  L.forEach((o,i)=>{const cod=tx(o,'cli');if(!cod){sem++;return}
   const ped=tx(o,'ped');if(ped){if(seen.has(ped)){dup++;return}seen.add(ped)}
-  const c=find2(cod),r={id:ped?'P'+ped:'#'+i,ped,dt:toDay(g(o,'data')),dts:tx(o,'data'),cod,nome:tx(o,'nome'),cnpj:tx(o,'cnpj').replace(/\D/g,''),rep:tx(o,'rep'),reg:tx(o,'reg'),val:PM.val?num(g(o,'val')):0,obs:tx(o,'obs'),cond:tx(o,'cond'),uf:(u=>u.length===2?u.toUpperCase():u)(tx(o,'uf')),fat:tx(o,'tf')===''?'':(num(g(o,'tf'))===0?'B':'N'),ent:c?c.c:null};
+  const c=find2(cod),r={id:ped?'P'+ped:'#'+i,ped,dt:toDay(g(o,'data')),dts:tx(o,'data'),cod,nome:tx(o,'nome'),cnpj:tx(o,'cnpj').replace(/\D/g,''),rep:tx(o,'rep'),reg:tx(o,'reg'),val:PM.val?num(g(o,'val')):0,obs:tx(o,'obs'),cond:tx(o,'cond'),emp:tx(o,'emp'),uf:(u=>u.length===2?u.toUpperCase():u)(tx(o,'uf')),fat:tx(o,'tf')===''?'':(num(g(o,'tf'))===0?'B':'N'),ent:c?c.c:null};
   ORDS.push(r);
   if(c){let q=G.get(c.c);if(!q)G.set(c.c,q={c,n:0,v:0});q.n++;q.v+=r.val}
   else{let q=miss.get(cod);if(!q)miss.set(cod,q={t:cod,nm:r.nome,cnpj:'',n:0,v:0});if(!q.cnpj)q.cnpj=r.cnpj;q.n++;q.v+=r.val}});
@@ -480,6 +507,8 @@ const PED_URL='http://localhost:5678/webhook/857f70d1-5118-4a66-9945-5e4b7b080aa
 $('#pdu').value=adapt(PED_URL);
 try{$('#pdu').value=adapt(localStorage.getItem('aval-ped-url2')||PED_URL);$('#pdm').value=localStorage.getItem('aval-ped-m')||'GET'}catch(x){}
 try{$('#ecu').value=adapt(localStorage.getItem('aval-eco-url')||'')}catch(x){}
+try{$('#apu').value=adapt(localStorage.getItem('aval-ap-url')||'')}catch(x){}
+$('#apu').onchange=()=>{try{localStorage.setItem('aval-ap-url',$('#apu').value.trim())}catch(x){}};
 $('#pdb').onclick=async()=>{
  const u=$('#pdu').value.trim(),m=$('#pdm').value||'GET',b=$('#pdb'),say=t=>{$('#pdst').innerHTML=t};
  if(!DATA.length){say('<span class="neg">Carregue antes a base financeira (Atualizar dados ou envio de arquivo).</span>');return}

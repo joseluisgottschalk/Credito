@@ -54,3 +54,13 @@ Pedido, Data, Cliente, CNPJ, Representante, Regional, UF, Valor do pedido, Fat.,
 - **UF**: lida do campo `UF` do pedido.
 - **Fat.**: baseada em `Total_faturamento` — **B** = igual a zero, **N** = diferente de zero (em branco se o campo não vier). A legenda aparece no cabeçalho do PDF.
 - Os campos são detectados automaticamente e podem ser ajustados em *Campos do pedido*.
+
+## Aprovação de pedidos gravando no banco (opcional)
+Preencha **Aprovação de pedidos** em *Configurar endereços* com a URL de produção (`/webhook/aprovacao-pedido`) do workflow importado de `n8n-aprovacao-pedido.json`.
+
+- **Aprovar** grava `controle = '19'` e **Reprovar** grava `controle = '06'` em `fapedido` e `faitempe`.
+- O dashboard envia `pedido`, `empresa` (campo mapeado em *Campos do pedido* > Empresa do pedido), `decisao` e `cliente`. O n8n define o valor do controle a partir da decisão e valida os dados antes de usar no SQL (parâmetros, sem concatenar texto).
+- Só marca como aprovado/reprovado na tela se o banco confirmar. Se falhar, aparece o motivo e a decisão não é aplicada.
+- Uma decisão já gravada só muda clicando na outra opção (não há "desfazer" que volte o banco ao estado anterior).
+- Em branco, o comportamento é o antigo: decisão só local.
+- Confira em `aprovacao-pedido.sql` os nomes das colunas (`nr_pedido`, `cd_empresa`) e o tipo do campo `controle`. Teste antes em homologação.
